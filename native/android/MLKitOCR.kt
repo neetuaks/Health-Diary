@@ -9,6 +9,8 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableMap
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -26,10 +28,15 @@ class MLKitOCRModule(val reactContext: ReactApplicationContext) : ReactContextBa
       val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
       recognizer.process(inputImage)
         .addOnSuccessListener { visionText ->
-          // Build a simple response. Production: parse into structured fields.
           val fullText = visionText.text
-          val res = mapOf("parameterType" to "unknown", "values" to mapOf<String,String>(), "confidence" to 0.0, "rawText" to fullText)
-          promise.resolve(res)
+          val map: WritableMap = Arguments.createMap()
+          map.putString("parameterType", "unknown")
+          map.putDouble("confidence", 0.0)
+          map.putString("rawText", fullText)
+          val values = Arguments.createMap()
+          // You may parse fullText here into structured key/value pairs (systolic/diastolic, glucose, etc.)
+          map.putMap("values", values)
+          promise.resolve(map)
         }
         .addOnFailureListener { e ->
           promise.reject("mlkit_error", e)

@@ -26,13 +26,21 @@ const plugin: ConfigPlugin = config => {
     return config;
   }]);
 
-  // Android: copy MLKitOCR.kt into android app java package
+  // Android: copy all kotlin sources from native/android into the app java package
   config = withDangerousMod(config, ["android", async (config) => {
     const projectRoot = config.modRequest.projectRoot;
-    const srcKt = path.join(projectRoot, 'native', 'android', 'MLKitOCR.kt');
-    const destKt = path.join(projectRoot, 'android', 'app', 'src', 'main', 'java', 'com', 'healthdiary', 'ocr', 'MLKitOCR.kt');
+    const srcDir = path.join(projectRoot, 'native', 'android');
+    const destDir = path.join(projectRoot, 'android', 'app', 'src', 'main', 'java', 'com', 'healthdiary', 'ocr');
     try {
-      copyIfExists(srcKt, destKt);
+      if (fs.existsSync(srcDir)) {
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        const files = fs.readdirSync(srcDir);
+        for (const f of files) {
+          if (f.endsWith('.kt') || f.endsWith('.java')) {
+            copyIfExists(path.join(srcDir, f), path.join(destDir, f));
+          }
+        }
+      }
     } catch (e) {
       console.warn('VisionOCR plugin Android copy failed', e);
     }

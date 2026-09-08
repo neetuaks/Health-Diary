@@ -31,6 +31,23 @@ Android (ML Kit) — Kotlin template
 - Use `InputImage.fromFilePath(context, Uri.parse(uri))` and `TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)`.
 - Parse the result similarly into structured values and return via the promise.
 
+Android registration note
+- After `expo prebuild` you'll have an Android project under `android/`. If the module does not appear to be registered automatically,
+	add your package to the list returned by `getPackages()` in `android/app/src/main/java/.../MainApplication.java`:
+
+```java
+import com.healthdiary.ocr.MLKitOCRPackage;
+// ...
+@Override
+protected List<ReactPackage> getPackages() {
+	List<ReactPackage> packages = new PackageList(this).getPackages();
+	packages.add(new MLKitOCRPackage());
+	return packages;
+}
+```
+
+The included Expo config plugin `plugins/vision-ocr-plugin` copies the Kotlin templates into the generated project and attempts to add the ML Kit Gradle dependency during `expo prebuild`, but you may need to verify and add the package manually in `MainApplication.java` if autolinking doesn't pick it up.
+
 Security & privacy
 - Never send images off-device. Do not include any network requests in the native module.
 - Only return structured values and confidence; do not persist images within the module.
