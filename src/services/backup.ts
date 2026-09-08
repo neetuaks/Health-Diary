@@ -54,7 +54,7 @@ export async function createEncryptedBackup(allProfiles = true) {
   });
 }
 
-export async function restoreEncryptedBackupFromFile(containerJson: string, recoveryKey?: string) {
+export async function peekEncryptedBackup(containerJson: string, recoveryKey?: string) {
   const container = JSON.parse(containerJson);
   const recovery = recoveryKey ?? await getStoredRecoveryKey();
   if (!recovery) throw new Error('No recovery key available');
@@ -66,11 +66,20 @@ export async function restoreEncryptedBackupFromFile(containerJson: string, reco
   if (!payload) throw new Error('Decryption failed');
   const decoded = Buffer.from(payload).toString('utf8');
   const obj = JSON.parse(decoded);
+  return obj;
+}
 
-  // Merge into local DB: insert or replace profiles, parameter_types, readings
+export async function restoreEncryptedBackupFromFile(containerJson: string, recoveryKey?: string, options?: { replace?: boolean }) {
+  const obj = await peekEncryptedBackup(containerJson, recoveryKey);
+
   const db = getDB();
   await new Promise<void>((resolve, reject) => {
     db.transaction(tx => {
+      if (options?.replace) {
+        // delete existing profiles/readings to fully replace
+        try { tx.executeSql('DELETE FROM readings;'); } catch (e) {}
+        try { tx.executeSql('DELETE FROM profiles;'); } catch (e) {}
+      }
       (obj.parameter_types || []).forEach((pt: any) => {
         try {
           tx.executeSql('INSERT OR REPLACE INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions) VALUES (?,?,?,?,?,?);', [pt.id, pt.display_name, pt.icon, pt.color, pt.is_builtin ?? 0, JSON.stringify(pt.field_definitions)]);

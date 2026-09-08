@@ -39,6 +39,25 @@ const plugin: ConfigPlugin = config => {
     return config;
   }]);
 
+  // Patch android/app/build.gradle to add ML Kit dependency if present
+  config = withDangerousMod(config, ["android", async (config) => {
+    try {
+      const projectRoot = config.modRequest.projectRoot;
+      const buildGradlePath = path.join(projectRoot, 'android', 'app', 'build.gradle');
+      if (fs.existsSync(buildGradlePath)) {
+        let content = fs.readFileSync(buildGradlePath, 'utf8');
+        if (!content.includes('com.google.mlkit:')) {
+          // add implementation line to dependencies block
+          content = content.replace(/dependencies\s*\{/, match => match + '\n    implementation "com.google.mlkit:text-recognition:16.0.0"');
+          fs.writeFileSync(buildGradlePath, content, 'utf8');
+        }
+      }
+    } catch (e) {
+      console.warn('VisionOCR plugin patch build.gradle failed', e);
+    }
+    return config;
+  }]);
+
   return config;
 };
 

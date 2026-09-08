@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Alert, Clipboard } from 'react-native';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { generateRecoveryKey, storeRecoveryKeyOnDevice, getStoredRecoveryKey } from '../services/crypto';
-import { createEncryptedBackup, restoreEncryptedBackupFromFile } from '../services/backup';
+import { createEncryptedBackup, peekEncryptedBackup, restoreEncryptedBackupFromFile } from '../services/backup';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -35,10 +35,46 @@ export default function BackupScreen() {
     if (res.type !== 'success') return;
     const content = await FileSystem.readAsStringAsync(res.uri, { encoding: FileSystem.EncodingType.UTF8 });
     try {
-      await restoreEncryptedBackupFromFile(content);
-      Alert.alert('Restore complete');
+      // preview decrypted payload to detect conflicts
+      const obj = await peekEncryptedBackup(content);
+      const existingIds: string[] = [];
+      const db = require('../db/init').getDB();
+      db.transaction(tx => {
+        tx.executeSql('SELECT id FROM profiles;', [], (_, r) => {
+          for (let i = 0; i < r.rows.length; i++) existingIds.push(r.rows.item(i).id);
+        });
+      }, () => {
+        // failed to read db, fallback to direct restore
+        restoreEncryptedBackupFromFile(content).then(() => Alert.alert('Restore complete')).catch((e:any) => Alert.alert('Restore failed', e?.message ?? String(e)));
+      }, () => {
+        // check for conflicts
+        const conflict = (obj.profiles || []).some((p:any) => existingIds.includes(p.id));
+        if (!conflict) {
+          restoreEncryptedBackupFromFile(content).then(() => Alert.alert('Restore complete')).catch((e:any) => Alert.alert('Restore failed', e?.message ?? String(e)));
+        } else {
+          // ask user merge vs replace
+          setRestoreModalOpen(true);
+          setPendingRestoreContent(content);
+        }
+      });
     } catch (e: any) {
       Alert.alert('Restore failed', e?.message ?? String(e));
+    }
+  };
+
+  const [restoreModalOpen, setRestoreModalOpen] = useState(false);
+  const [pendingRestoreContent, setPendingRestoreContent] = useState<string | null>(null);
+
+  const handleRestoreChoice = async (choice: 'merge' | 'replace') => {
+    if (!pendingRestoreContent) { setRestoreModalOpen(false); return; }
+    try {
+      await restoreEncryptedBackupFromFile(pendingRestoreContent, undefined, { replace: choice === 'replace' });
+      Alert.alert('Restore complete');
+    } catch (e:any) {
+      Alert.alert('Restore failed', e?.message ?? String(e));
+    } finally {
+      setRestoreModalOpen(false);
+      setPendingRestoreContent(null);
     }
   };
 
@@ -65,6 +101,7 @@ export default function BackupScreen() {
         <TouchableOpacity onPress={handleRestore} style={{ marginTop: 12, padding: 12 }}>
           <Text>Restore from Backup</Text>
         </TouchableOpacity>
+        <RestoreOptionsModal visible={restoreModalOpen} onClose={() => setRestoreModalOpen(false)} onChoose={choice => handleRestoreChoice(choice)} />
       </View>
     </View>
   );
