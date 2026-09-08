@@ -8,7 +8,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { getStoredRecoveryKey } from '../services/crypto';
 import { deleteAllData } from '../services/dataManager';
 import ConfirmDeleteAllModal from '../components/ConfirmDeleteAllModal';
-import { connectToGoogleDrive, uploadBackupToDrive, getAccessToken, disconnectDrive } from '../services/googleDriveBackup';
+import { connectToGoogleDrivePKCE, uploadBackupToDrive, getAccessToken, disconnectDrive } from '../services/googleDriveBackup';
 import * as FileSystem from 'expo-file-system';
 import { getBackupReminderDays, setBackupReminderDays } from '../services/appSettings';
 import { useEffect } from 'react';
@@ -55,13 +55,10 @@ export default function SettingsScreen({ navigation }: any) {
           try {
             const token = await getAccessToken();
             if (!token) {
-              await connectToGoogleDrive();
+              await connectToGoogleDrivePKCE();
             }
-            // create local encrypted backup to cache and upload
             const tempPath = FileSystem.cacheDirectory + 'healthdiary_backup.hdb';
-            // delegate to backup service to write file to cache; createEncryptedBackup already writes then shares — reuse by calling it and reading cache file
             await createEncryptedBackup(true);
-            // upload the cache copy if present
             const info = await FileSystem.getInfoAsync(tempPath);
             if (info.exists) {
               const res = await uploadBackupToDrive(tempPath);
@@ -78,7 +75,7 @@ export default function SettingsScreen({ navigation }: any) {
         <TouchableOpacity onPress={async () => { await disconnectDrive(); Alert.alert('Disconnected'); }} style={{ padding: 12 }}>
           <Text>Disconnect Google Drive</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('Backup')} style={{ padding: 12 }}>
+        <TouchableOpacity onPress={() => navigation.navigate('DriveBackups')} style={{ padding: 12 }}>
           <Text>Manage Backups</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={async () => {

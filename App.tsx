@@ -53,6 +53,7 @@ export default function App() {
           </Stack.Screen>
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="Backup" component={BackupScreen} />
+          <Stack.Screen name="DriveBackups" component={require('./src/screens/DriveBackupsScreen').default} />
           <Stack.Screen name="Profiles" component={require('./src/screens/ProfileManager').default} />
         </Stack.Navigator>
       </NavigationContainer>
