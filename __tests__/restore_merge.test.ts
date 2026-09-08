@@ -1,25 +1,6 @@
 import { restoreEncryptedBackupFromFile, peekEncryptedBackup } from '../src/services/backup';
 
-jest.mock('../src/db/init', () => ({
-  getDB: () => ({
-    transaction: (fn, errCb, okCb) => {
-      // provide a fake tx object that supports executeSql
-      const tx = {
-        executeSql: (_sql, _params, cb) => {
-          // simulate no existing rows
-          const res = { rows: { length: 0, item: (_i:number) => ({}) } };
-          if (cb) cb(null, res);
-        }
-      };
-      try {
-        fn(tx);
-        if (okCb) okCb();
-      } catch (e) {
-        if (errCb) errCb(e);
-      }
-    }
-  }))
-}));
+jest.mock('../src/db/init', () => require('../__mocks__/db-init'));
 
 test('restoreEncryptedBackupFromFile merge behavior (no conflicts)', async () => {
   // create a fake container using peekEncryptedBackup's inverse path
