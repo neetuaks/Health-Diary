@@ -1,0 +1,10 @@
+{
+  "testRunner": "jest",
+  "configurations": {
+    "android.emu.debug": {
+      "device": {
+        "avdName": "Pixel_3a_API_30"
+      }
+    }
+  }
+}

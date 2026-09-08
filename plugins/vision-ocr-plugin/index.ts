@@ -46,10 +46,19 @@ const plugin: ConfigPlugin = config => {
       const buildGradlePath = path.join(projectRoot, 'android', 'app', 'build.gradle');
       if (fs.existsSync(buildGradlePath)) {
         let content = fs.readFileSync(buildGradlePath, 'utf8');
-        if (!content.includes('com.google.mlkit:')) {
-          // add implementation line to dependencies block
-          content = content.replace(/dependencies\s*\{/, match => match + '\n    implementation "com.google.mlkit:text-recognition:16.0.0"');
-          fs.writeFileSync(buildGradlePath, content, 'utf8');
+        if (!content.match(/com\.google\.mlkit[: ]text-recognition/)) {
+          // Try to safely insert implementation into the dependencies block
+          const depBlockMatch = content.match(/dependencies\s*\{[\s\S]*?\n\}/);
+          if (depBlockMatch) {
+            const depBlock = depBlockMatch[0];
+            const newDepBlock = depBlock.replace(/\n\}/, '\n    implementation "com.google.mlkit:text-recognition:16.0.0"\n}');
+            content = content.replace(depBlock, newDepBlock);
+            fs.writeFileSync(buildGradlePath, content, 'utf8');
+          } else {
+            // Fallback: append implementation at end
+            content += '\ndependencies {\n    implementation "com.google.mlkit:text-recognition:16.0.0"\n}\n';
+            fs.writeFileSync(buildGradlePath, content, 'utf8');
+          }
         }
       }
     } catch (e) {
