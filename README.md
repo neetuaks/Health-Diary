@@ -16,6 +16,44 @@ npm install
 npm run start
 ```
 
+Native builds (iOS / Android)
+
+1. To include the native OCR modules (Vision on iOS, ML Kit on Android) run:
+
+```bash
+expo prebuild
+```
+
+2. iOS: open `ios/*.xcworkspace` in Xcode, ensure `VisionOCR.swift` and `VisionOCRBridge.m` are added to the app target, then build in the simulator or device.
+
+3. Android: after `expo prebuild` verify `android/app/src/main/java/com/healthdiary/ocr/MLKitOCR.kt` and `MLKitOCRPackage.kt` are present. Add Google ML Kit dependency if not automatically added and rebuild.
+
+EAS build
+
+1. A minimal `eas.json` profile is included. To build with EAS:
+
+```bash
+npm run eas:build --platform ios
+# or
+npm run eas:build --platform android
+```
+
+CI
+
+- A GitHub Actions workflow (`.github/workflows/ci.yml`) runs unit tests on push/PR to `main`.
+
+Testing
+
+- Run unit tests locally:
+
+```bash
+npm ci
+npm test
+```
+
+- Device tests: OCR and backup/restore require device/emulator verification. Use Xcode/Android Studio to run the native app after prebuild or use EAS builds.
+
+
 Notes:
 - This project is scaffolded with TypeScript and uses `expo-sqlite` for local-only storage.
 - All user data stays on-device unless the user explicitly exports or uploads an encrypted backup to their own Google Drive.
