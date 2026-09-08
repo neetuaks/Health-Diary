@@ -55,6 +55,9 @@ export async function connectToGoogleDrivePKCE(): Promise<void> {
   throw new Error('Google auth failed or was cancelled');
 }
 
+// Backwards-compatible alias
+export const connectToGoogleDrive = connectToGoogleDrivePKCE;
+
 export async function refreshAccessTokenIfNeeded(): Promise<string | null> {
   try {
     if (_tokenInfo && _tokenInfo.expiresAt && _tokenInfo.expiresAt > Date.now() + 60000) return _tokenInfo.accessToken;
