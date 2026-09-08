@@ -2,10 +2,10 @@ import { restoreEncryptedBackupFromFile, peekEncryptedBackup } from '../src/serv
 
 jest.mock('../src/db/init', () => ({
   getDB: () => ({
-    transaction: (fn: any, errCb?: any, okCb?: any) => {
+    transaction: (fn, errCb, okCb) => {
       // provide a fake tx object that supports executeSql
       const tx = {
-        executeSql: (_sql: string, _params: any[], cb?: any) => {
+        executeSql: (_sql, _params, cb) => {
           // simulate no existing rows
           const res = { rows: { length: 0, item: (_i:number) => ({}) } };
           if (cb) cb(null, res);

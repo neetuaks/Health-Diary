@@ -6,7 +6,9 @@ describe('Google Drive backup helpers', () => {
   });
 
   test('listBackupsFromDrive calls Drive API and returns files', async () => {
-    jest.spyOn(G, 'getAccessToken' as any).mockResolvedValue('tok123');
+    // set a token in the SecureStore mock
+    global.__EXPO_SECURE_STORE_STORE = global.__EXPO_SECURE_STORE_STORE || {};
+    global.__EXPO_SECURE_STORE_STORE['healthdiary_google_drive_token_v2'] = JSON.stringify({ accessToken: 'tok123', expiresAt: Date.now() + 10000 });
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ files: [{ id: '1', name: 'a', createdTime: 't' }] }) }) as any;
     const res = await G.listBackupsFromDrive();
     expect(res.length).toBe(1);
@@ -14,7 +16,8 @@ describe('Google Drive backup helpers', () => {
   });
 
   test('deleteBackupFromDrive issues DELETE and throws on failure', async () => {
-    jest.spyOn(G, 'getAccessToken' as any).mockResolvedValue('tok123');
+    global.__EXPO_SECURE_STORE_STORE = global.__EXPO_SECURE_STORE_STORE || {};
+    global.__EXPO_SECURE_STORE_STORE['healthdiary_google_drive_token_v2'] = JSON.stringify({ accessToken: 'tok123', expiresAt: Date.now() + 10000 });
     global.fetch = jest.fn().mockResolvedValue({ ok: false, text: async () => 'err' }) as any;
     await expect(G.deleteBackupFromDrive('1')).rejects.toThrow('Delete failed');
   });
