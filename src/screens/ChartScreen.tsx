@@ -4,19 +4,7 @@ import { useProfile } from '../services/profileContext';
 import { fetchReadingsForProfile } from '../services/readingService';
 import { fetchParameterTypes } from '../services/parameterRegistry';
 import { VictoryChart, VictoryLine, VictoryAxis, VictoryLegend } from 'victory-native';
-import { filterByRange } from '../services/utils';
-
-type RangeKey = 'today' | 'yesterday' | '7' | '30';
-
-function filterByRange(readings: any[], range: RangeKey) {
-  const now = new Date();
-  let start = new Date();
-  if (range === 'today') start.setHours(0,0,0,0);
-  else if (range === 'yesterday') { start.setDate(now.getDate() -1); start.setHours(0,0,0,0); }
-  else if (range === '7') { start.setDate(now.getDate() -7); }
-  else { start.setDate(now.getDate() -30); }
-  return readings.filter(r => new Date(r.recorded_at) >= start);
-}
+import { filterByRange, RangeKey } from '../services/utils';
 
 export default function ChartScreen() {
   const { activeProfile } = useProfile();
@@ -102,14 +90,3 @@ const styles = StyleSheet.create({
   rangeBtn: { padding: 6, borderWidth: 1, borderColor: '#0077CC', borderRadius: 6, marginRight: 8 },
   rangeBtnActive: { backgroundColor: '#0077CC' }
 });
-import React from 'react';
-import { View, Text } from 'react-native';
-
-export default function ChartScreen() {
-  return (
-    <View style={{ flex: 1, padding: 16 }}>
-      <Text style={{ fontSize: 18 }}>Charts</Text>
-      <Text style={{ color: '#666', marginTop: 8 }}>Charting will render here.</Text>
-    </View>
-  );
-}

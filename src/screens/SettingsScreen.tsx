@@ -11,8 +11,6 @@ import ConfirmDeleteAllModal from '../components/ConfirmDeleteAllModal';
 import { connectToGoogleDrivePKCE, uploadBackupToDrive, getAccessToken, disconnectDrive } from '../services/googleDriveBackup';
 import * as FileSystem from 'expo-file-system';
 import { getBackupReminderDays, setBackupReminderDays } from '../services/appSettings';
-import { useEffect } from 'react';
-import { useState } from 'react';
 
 export default function SettingsScreen({ navigation }: any) {
   const { profiles } = useProfile();

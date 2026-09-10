@@ -1,6 +1,6 @@
-import { Database } from 'expo-sqlite';
+import { SQLiteDatabase } from 'expo-sqlite';
 
-export function seedParameterTypes(db: Database) {
+export function seedParameterTypes(db: SQLiteDatabase) {
   // Insert built-in BP and Glucose parameter types if not present
   const bp = {
     id: 'bp',
@@ -27,10 +27,12 @@ export function seedParameterTypes(db: Database) {
     ])
   };
 
-  db.transaction(tx => {
-    tx.executeSql('INSERT OR IGNORE INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions) VALUES (?,?,?,?,?,?);',
-      [bp.id, bp.display_name, bp.icon, bp.color, bp.is_builtin, bp.field_definitions]);
-    tx.executeSql('INSERT OR IGNORE INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions) VALUES (?,?,?,?,?,?);',
-      [glucose.id, glucose.display_name, glucose.icon, glucose.color, glucose.is_builtin, glucose.field_definitions]);
-  });
+  db.runSync(
+    'INSERT OR IGNORE INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions) VALUES (?,?,?,?,?,?);',
+    [bp.id, bp.display_name, bp.icon, bp.color, bp.is_builtin, bp.field_definitions]
+  );
+  db.runSync(
+    'INSERT OR IGNORE INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions) VALUES (?,?,?,?,?,?);',
+    [glucose.id, glucose.display_name, glucose.icon, glucose.color, glucose.is_builtin, glucose.field_definitions]
+  );
 }

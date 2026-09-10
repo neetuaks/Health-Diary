@@ -31,7 +31,7 @@ export default function DiaryScreen() {
   const [hideBackupBanner, setHideBackupBanner] = useState(false);
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
   const [reminderDays, setReminderDays] = useState<number>(30);
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
 
   useEffect(() => {
     fetchParameterTypes().then(setParamTypes);

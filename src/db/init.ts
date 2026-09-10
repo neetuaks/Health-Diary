@@ -1,11 +1,11 @@
 import * as SQLite from 'expo-sqlite';
 import { seedParameterTypes } from './seed';
 
-const db = SQLite.openDatabase('healthdiary.db');
+const db = SQLite.openDatabaseSync('healthdiary.db');
 
 export function initDB() {
-  db.transaction(tx => {
-    tx.executeSql(`CREATE TABLE IF NOT EXISTS profiles (
+  try {
+    db.execSync(`CREATE TABLE IF NOT EXISTS profiles (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       date_of_birth TEXT,
@@ -14,7 +14,7 @@ export function initDB() {
       last_backup_at TEXT
     );`);
 
-    tx.executeSql(`CREATE TABLE IF NOT EXISTS parameter_types (
+    db.execSync(`CREATE TABLE IF NOT EXISTS parameter_types (
       id TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,
       icon TEXT,
@@ -23,7 +23,7 @@ export function initDB() {
       field_definitions TEXT NOT NULL
     );`);
 
-    tx.executeSql(`CREATE TABLE IF NOT EXISTS readings (
+    db.execSync(`CREATE TABLE IF NOT EXISTS readings (
       id TEXT PRIMARY KEY,
       profile_id TEXT NOT NULL,
       parameter_type_id TEXT NOT NULL,
@@ -33,13 +33,17 @@ export function initDB() {
       values TEXT NOT NULL,
       notes TEXT
     );`);
-  }, err => {
-    console.error('DB init error', err);
-  }, () => {
+
     seedParameterTypes(db);
-  });
+  } catch (err) {
+    console.error('DB init error', err);
+  }
 }
 
 export function getDB() {
   return db;
 }
+
+// Run once at module load so tables exist before any consumer queries them,
+// regardless of React effect ordering.
+initDB();

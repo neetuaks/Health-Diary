@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "health-diary",
+    "slug": "health-diary",
+    "version": "0.1.0",
+    "sdkVersion": "57.0.0",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "android": {
+      "package": "com.expo.HealthDiary"
+    },
+    "plugins": [
+      "expo-splash-screen"
+    ]
+  }
+}

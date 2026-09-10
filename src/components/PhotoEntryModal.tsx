@@ -19,8 +19,8 @@ export default function PhotoEntryModal({ visible, onClose, onSaved }: { visible
         return;
       }
       const res = fromCamera ? await ImagePicker.launchCameraAsync({ quality: 0.8 }) : await ImagePicker.launchImageLibraryAsync({ quality: 0.8 });
-      if (res.cancelled) { setBusy(false); return; }
-      const uri = res.uri;
+      if (res.canceled || !res.assets || res.assets.length === 0) { setBusy(false); return; }
+      const uri = res.assets[0].uri;
       const ocr = await processImageForReading(uri);
       // Always show confirmation edit form with prefilled values
       setPrefill({ parameter_type_id: ocr.parameterType === 'bp' ? 'bp' : 'glucose', values: ocr.values, source: 'photo' });
