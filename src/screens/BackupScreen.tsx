@@ -1,22 +1,35 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TextInput, Alert, StyleSheet } from 'react-native';
 import { generateRecoveryKey, storeRecoveryKeyOnDevice, getStoredRecoveryKey } from '../services/crypto';
 import { createEncryptedBackup, peekEncryptedBackup, restoreEncryptedBackupFromFile } from '../services/backup';
+import { tryAuthenticate } from '../services/deviceAuth';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import RestoreOptionsModal from '../components/RestoreOptionsModal';
 import { getDB } from '../db/init';
+import { Screen, Button, Card, Banner } from '../theme/components';
+import { colors, spacing, typography, radius } from '../theme/tokens';
 
 export default function BackupScreen() {
   const [recovery, setRecovery] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [restoreKeyInput, setRestoreKeyInput] = useState('');
+  const [restoreModalOpen, setRestoreModalOpen] = useState(false);
+  const [pendingRestoreContent, setPendingRestoreContent] = useState<string | null>(null);
+  const [pendingRestoreKey, setPendingRestoreKey] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    getStoredRecoveryKey().then(key => {
+      if (key) { setRecovery(key); setConfirmed(true); }
+    });
+  }, []);
 
   const handleGenerate = async () => {
     const key = await generateRecoveryKey();
     await storeRecoveryKeyOnDevice(key);
     setRecovery(key);
-    Alert.alert('Recovery Key generated', 'Save this key now. You can share it using the Share button.');
+    setConfirmed(false);
   };
 
   const handleShareKey = async () => {
@@ -27,18 +40,24 @@ export default function BackupScreen() {
   };
 
   const handleBackup = async () => {
+    if (!recovery) {
+      Alert.alert('Generate a Recovery Key first', 'You need a Recovery Key before your first backup — tap "Generate Recovery Key" above.');
+      return;
+    }
     if (!confirmed) return Alert.alert('Confirm', 'Please confirm you have saved the Recovery Key.');
+    if (!(await tryAuthenticate('Authenticate to back up your data'))) return;
     await createEncryptedBackup(true);
-    Alert.alert('Backup created and shared via OS share sheet');
+    Alert.alert('Backup created', 'Your encrypted backup was created and shared via the OS share sheet.');
   };
 
   const handleRestore = async () => {
+    if (!(await tryAuthenticate('Authenticate to restore your data'))) return;
     const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
-    if (res.type !== 'success') return;
-    const content = await FileSystem.readAsStringAsync(res.uri, { encoding: FileSystem.EncodingType.UTF8 });
+    if (res.canceled || !res.assets || res.assets.length === 0) return;
+    const content = await FileSystem.readAsStringAsync(res.assets[0].uri, { encoding: FileSystem.EncodingType.UTF8 });
+    const keyToUse = restoreKeyInput.trim() || undefined;
     try {
-      // preview decrypted payload to detect conflicts
-      const obj = await peekEncryptedBackup(content);
+      const obj = await peekEncryptedBackup(content, keyToUse);
       let existingIds: string[] = [];
       try {
         const db = getDB();
@@ -50,60 +69,80 @@ export default function BackupScreen() {
 
       const conflict = (obj.profiles || []).some((p: any) => existingIds.includes(p.id));
       if (!conflict) {
-        await restoreEncryptedBackupFromFile(content);
+        await restoreEncryptedBackupFromFile(content, keyToUse);
         Alert.alert('Restore complete');
       } else {
-        // ask user merge vs replace
-        setRestoreModalOpen(true);
         setPendingRestoreContent(content);
+        setPendingRestoreKey(keyToUse);
+        setRestoreModalOpen(true);
       }
     } catch (e: any) {
-      Alert.alert('Restore failed', e?.message ?? String(e));
+      Alert.alert('Restore failed', 'The Recovery Key may be wrong, or the file may be corrupted. Please check the key and try again.');
     }
   };
-
-
-  const [restoreModalOpen, setRestoreModalOpen] = useState(false);
-  const [pendingRestoreContent, setPendingRestoreContent] = useState<string | null>(null);
 
   const handleRestoreChoice = async (choice: 'merge' | 'replace') => {
     if (!pendingRestoreContent) { setRestoreModalOpen(false); return; }
     try {
-      await restoreEncryptedBackupFromFile(pendingRestoreContent, undefined, { replace: choice === 'replace' });
+      await restoreEncryptedBackupFromFile(pendingRestoreContent, pendingRestoreKey, { replace: choice === 'replace' });
       Alert.alert('Restore complete');
-    } catch (e:any) {
-      Alert.alert('Restore failed', e?.message ?? String(e));
+    } catch (e: any) {
+      Alert.alert('Restore failed', 'The Recovery Key may be wrong, or the file may be corrupted. Please check the key and try again.');
     } finally {
       setRestoreModalOpen(false);
       setPendingRestoreContent(null);
+      setPendingRestoreKey(undefined);
     }
   };
 
   return (
-    <View style={{ flex: 1, padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: '600' }}>Backup & Restore</Text>
+    <Screen scroll>
+      <Text style={typography.h1}>Backup & Restore</Text>
 
-      <View style={{ marginTop: 12 }}>
-        <TouchableOpacity onPress={handleGenerate} style={{ padding: 12 }}>
-          <Text>Generate Recovery Key</Text>
-        </TouchableOpacity>
-        {recovery && (
-          <View style={{ marginTop: 8 }}>
-            <Text selectable>{recovery}</Text>
-            <TouchableOpacity onPress={handleShareKey} style={{ padding: 8 }}><Text>Share Recovery Key</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => { setConfirmed(true); Alert.alert('Confirmed', 'Recovery Key confirmed saved'); }} style={{ padding: 8 }}><Text>I've saved my Recovery Key</Text></TouchableOpacity>
-          </View>
+      <Card style={{ marginTop: spacing.lg }}>
+        <Text style={typography.h2}>Recovery Key</Text>
+        {recovery ? (
+          <>
+            <Text style={[typography.body, styles.keyText]} selectable>{recovery}</Text>
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+              <Button label="Share Key" variant="secondary" onPress={handleShareKey} />
+              {!confirmed && <Button label="I've saved my key" onPress={() => setConfirmed(true)} />}
+            </View>
+            {!confirmed && (
+              <Banner variant="warning" message="Save this key now — it can't be recovered later. You need it to restore your data on another device." />
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={typography.caption}>You need a Recovery Key before your first backup.</Text>
+            <Button label="Generate Recovery Key" onPress={handleGenerate} style={{ marginTop: spacing.md }} />
+          </>
         )}
+      </Card>
 
-        <TouchableOpacity onPress={handleBackup} style={{ marginTop: 12, backgroundColor: '#0077CC', padding: 12, borderRadius: 8 }}>
-          <Text style={{ color: '#fff' }}>Back Up Data (Encrypted)</Text>
-        </TouchableOpacity>
+      <Button label="Back Up Data (Encrypted)" onPress={handleBackup} style={{ marginTop: spacing.lg }} />
 
-        <TouchableOpacity onPress={handleRestore} style={{ marginTop: 12, padding: 12 }}>
-          <Text>Restore from Backup</Text>
-        </TouchableOpacity>
-        <RestoreOptionsModal visible={restoreModalOpen} onClose={() => setRestoreModalOpen(false)} onChoose={choice => handleRestoreChoice(choice)} />
-      </View>
-    </View>
+      <Card style={{ marginTop: spacing.lg }}>
+        <Text style={typography.h2}>Restore from Backup</Text>
+        <Text style={[typography.caption, { marginTop: spacing.xs }]}>
+          Restoring on this device? Leave the field below blank to use the key already saved here. Restoring on a new device? Enter your Recovery Key.
+        </Text>
+        <TextInput
+          value={restoreKeyInput}
+          onChangeText={setRestoreKeyInput}
+          placeholder="Recovery Key (optional on this device)"
+          autoCapitalize="none"
+          style={styles.input}
+        />
+        <Button label="Choose Backup File & Restore" variant="secondary" onPress={handleRestore} style={{ marginTop: spacing.md }} />
+      </Card>
+
+      <RestoreOptionsModal visible={restoreModalOpen} onClose={() => setRestoreModalOpen(false)} onChoose={choice => handleRestoreChoice(choice)} />
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  keyText: { marginTop: spacing.sm, fontFamily: 'monospace' as any, backgroundColor: colors.background, padding: spacing.md, borderRadius: radius.md },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md, backgroundColor: colors.surface }
+});

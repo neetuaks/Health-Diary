@@ -164,14 +164,14 @@ erDiagram
         string recorded_at
         string created_at
         string source
-        string values_json
+        string vals
         string notes
     }
 ```
 
 ### Storage rules
 
-- `field_definitions` and `values` are stored as JSON strings and parsed at service boundaries.
+- `field_definitions` and `vals` are stored as JSON strings and parsed at service boundaries.
 - `source` is one of `manual`, `photo`, or `bluetooth` according to the TypeScript model. Bluetooth is modeled but not currently implemented as a UI flow.
 - IDs are UUID strings.
 - Dates are ISO strings.
@@ -184,7 +184,7 @@ erDiagram
 |---|---|
 | `no such table` | Confirm `src/db/init.ts` loaded and `CREATE TABLE` completed |
 | Empty diary | Confirm `activeProfile` is set and query uses its ID |
-| Broken field values | Inspect JSON stored in `readings.values` and parsing in `readingService.ts` |
+| Broken field values | Inspect JSON stored in `readings.vals` and parsing in `readingService.ts` |
 | Missing BP/Glucose types | Check `seedParameterTypes()` and the `parameter_types` table |
 | Writes fail with bind error | Ensure no SQL parameter is `undefined`; use `null` for absent values |
 | Data disappears after reinstall | Expected for local-only data unless a backup was exported |
@@ -357,7 +357,7 @@ sequenceDiagram
 - `dataExport.ts` creates plain JSON and CSV files. These exports are not encrypted.
 - `diagnosticsLog.ts` writes to the app document directory and shares the log through the OS.
 
-When debugging report/chart failures, first verify the input data shape (`recorded_at`, `values`, numeric field keys), then isolate the renderer. A valid database query does not guarantee that Victory or `expo-print` accepts the resulting values.
+When debugging report/chart failures, first verify the input data shape (`recorded_at`, `vals`, numeric field keys), then isolate the renderer. A valid database query does not guarantee that Victory or `expo-print` accepts the resulting values.
 
 ## 12. Configuration and Native Builds
 

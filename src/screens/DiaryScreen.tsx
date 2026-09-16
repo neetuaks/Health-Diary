@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, SectionList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, SectionList, TouchableOpacity, StyleSheet } from 'react-native';
 import PhotoEntryModal from '../components/PhotoEntryModal';
 import { useProfile } from '../services/profileContext';
 import { daysSince } from '../services/utils';
@@ -10,6 +10,8 @@ import ReadingItem from '../components/ReadingItem';
 import NewRecordModal from '../components/NewRecordModal';
 import { ParameterType } from '../types';
 import { fetchParameterTypes } from '../services/parameterRegistry';
+import { Screen, Banner, ActionSheet, EmptyState } from '../theme/components';
+import { colors, spacing, typography, radius } from '../theme/tokens';
 
 function groupByDay(readings: any[]) {
   const groups: Record<string, any[]> = {};
@@ -31,6 +33,7 @@ export default function DiaryScreen() {
   const [hideBackupBanner, setHideBackupBanner] = useState(false);
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
   const [reminderDays, setReminderDays] = useState<number>(30);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const navigation = useNavigation<any>();
 
   useEffect(() => {
@@ -56,21 +59,20 @@ export default function DiaryScreen() {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <Screen>
       {!activeProfile ? (
-        <View style={{ alignItems: 'center', marginTop: 40 }}>
-          <Text style={{ fontSize: 18 }}>No profile yet</Text>
-          <Text style={{ color: '#666', marginTop: 8 }}>Add a profile to get started.</Text>
-        </View>
+        <EmptyState title="No profile yet" subtitle="Add a profile to get started." />
       ) : (
-        <View style={{ flex: 1, padding: 16 }}>
-          {!hideBackupBanner && activeProfile && readings.length > 0 && (daysSince(activeProfile.last_backup_at) > reminderDays) && (
-            <TouchableOpacity onPress={() => navigation.navigate('Backup')} style={{ backgroundColor: '#FFF4E5', padding: 12, borderRadius: 8, marginBottom: 12 }}>
-              <Text style={{ color: '#7A4A00' }}>You haven't backed up your data in {daysSince(activeProfile.last_backup_at)} days. Your data lives only on this phone and won't survive an app reinstall or a new device unless you back it up. Tap to back up now. Dismiss</Text>
-              <TouchableOpacity onPress={() => setHideBackupBanner(true)}><Text style={{ color: '#0077CC', marginTop: 6 }}>Dismiss</Text></TouchableOpacity>
-            </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          {!hideBackupBanner && readings.length > 0 && (daysSince(activeProfile.last_backup_at) > reminderDays) && (
+            <Banner
+              variant="warning"
+              message={`You haven't backed up your data in ${daysSince(activeProfile.last_backup_at)} days. Your data lives only on this phone and won't survive an app reinstall or a new device unless you back it up. Tap to back up now.`}
+              onPress={() => navigation.navigate('Backup')}
+              onDismiss={() => setHideBackupBanner(true)}
+            />
           )}
-          <Text style={{ fontSize: 16, marginBottom: 12 }}>Diary for {activeProfile.name}</Text>
+          <Text style={[typography.h2, { marginBottom: spacing.md }]}>Diary for {activeProfile.name}</Text>
           <SectionList
             sections={sections}
             keyExtractor={(item: any) => item.id}
@@ -79,26 +81,26 @@ export default function DiaryScreen() {
               return <ReadingItem reading={item} parameterDisplayName={pt?.display_name} onDelete={handleDelete} onPress={() => { setEditingReading(item); setModalVisible(true); }} />;
             }}
             renderSectionHeader={({ section: { title } }) => (
-              <View style={styles.header}><Text style={{ fontWeight: '700' }}>{title}</Text></View>
+              <View style={styles.header}><Text style={typography.bodyBold}>{title}</Text></View>
             )}
             ListEmptyComponent={() => (
-              <View style={{ alignItems: 'center', marginTop: 40 }}>
-                <Text style={{ fontSize: 16 }}>No readings yet</Text>
-                <Text style={{ color: '#666', marginTop: 8 }}>Tap + to add a new reading.</Text>
-              </View>
+              <EmptyState title="No readings yet" subtitle="Tap + to add a new reading." />
             )}
           />
 
-          <TouchableOpacity style={styles.fab} onPress={() => {
-            // offer Manual vs Photo entry
-            Alert.alert('New Record', 'Choose entry method', [
-              { text: 'Manual', onPress: () => setModalVisible(true) },
-              { text: 'Photo (OCR)', onPress: () => setPhotoModalVisible(true) },
-              { text: 'Cancel', style: 'cancel' }
-            ]);
-          }}>
-            <Text style={{ color: '#fff', fontSize: 28 }}>+</Text>
+          <TouchableOpacity style={styles.fab} onPress={() => setActionSheetVisible(true)}>
+            <Text style={{ color: colors.textOnPrimary, fontSize: 28 }}>+</Text>
           </TouchableOpacity>
+
+          <ActionSheet
+            visible={actionSheetVisible}
+            onClose={() => setActionSheetVisible(false)}
+            title="New Record"
+            actions={[
+              { label: 'Manual Entry', onPress: () => setModalVisible(true) },
+              { label: 'Photo (OCR)', onPress: () => setPhotoModalVisible(true) }
+            ]}
+          />
 
           <NewRecordModal visible={modalVisible} editingReading={editingReading} onClose={() => { setModalVisible(false); setEditingReading(null); }} onSaved={() => {
             if (!activeProfile) return;
@@ -112,12 +114,11 @@ export default function DiaryScreen() {
           }} />
         </View>
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  fab: { position: 'absolute', right: 16, bottom: 24, backgroundColor: '#0077CC', padding: 16, borderRadius: 32, elevation: 2 },
-  header: { backgroundColor: '#F3F9FF', padding: 8 }
+  fab: { position: 'absolute', right: spacing.lg, bottom: spacing.xl, backgroundColor: colors.primary, padding: spacing.lg, borderRadius: radius.pill, elevation: 2 },
+  header: { backgroundColor: colors.primaryMuted, padding: spacing.sm, borderRadius: radius.sm }
 });
-

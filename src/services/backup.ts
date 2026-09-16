@@ -19,7 +19,7 @@ export async function createEncryptedBackup(allProfiles = true) {
   const ptsRaw = await db.getAllAsync<any>('SELECT * FROM parameter_types;');
   const pts = ptsRaw.map((p: any) => ({ ...p, field_definitions: JSON.parse(p.field_definitions) }));
   const readingsRaw = await db.getAllAsync<any>('SELECT * FROM readings;');
-  const readings = readingsRaw.map((r: any) => ({ ...r, values: JSON.parse(r.values) }));
+  const readings = readingsRaw.map((r: any) => ({ ...r, vals: JSON.parse(r.vals) }));
   const payloadObj = { profiles, parameter_types: pts, readings };
   const payloadStr = JSON.stringify(payloadObj);
   const payload = Buffer.from(payloadStr, 'utf8');
@@ -81,7 +81,7 @@ export async function restoreEncryptedBackupFromFile(containerJson: string, reco
   }
   for (const r of (obj.readings || [])) {
     try {
-      await db.runAsync('INSERT OR REPLACE INTO readings (id, profile_id, parameter_type_id, recorded_at, created_at, source, values, notes) VALUES (?,?,?,?,?,?,?,?);', [r.id, r.profile_id, r.parameter_type_id, r.recorded_at, r.created_at || new Date().toISOString(), r.source || 'manual', JSON.stringify(r.values || {}), r.notes || null]);
+      await db.runAsync('INSERT OR REPLACE INTO readings (id, profile_id, parameter_type_id, recorded_at, created_at, source, vals, notes) VALUES (?,?,?,?,?,?,?,?);', [r.id, r.profile_id, r.parameter_type_id, r.recorded_at, r.created_at || new Date().toISOString(), r.source || 'manual', JSON.stringify(r.vals || {}), r.notes || null]);
     } catch (e) { }
   }
 

@@ -1,5 +1,6 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { ageFromDOB } from './utils';
 
 function makeSimpleSVG(points: { x: number; y: number }[], width = 600, height = 200) {
   if (!points || points.length === 0) return '';
@@ -22,12 +23,13 @@ export async function generateReportPDF(profile: any, readings: any[], parameter
     grouped[r.parameter_type_id].push(r);
   });
 
-  let body = `<h1>${profile.name} — Report</h1><p>Generated: ${new Date().toLocaleString()}</p>`;
+  const age = ageFromDOB(profile.date_of_birth);
+  let body = `<h1>${profile.name}${age !== null ? ` (${age} years old)` : ''} — Report</h1><p>Generated: ${new Date().toLocaleString()}</p>`;
   for (const [ptype, items] of Object.entries(grouped)) {
-    const points = items.map((it:any) => ({ x: new Date(it.recorded_at).getTime(), y: Number(Object.values(it.values)[0]) }));
+    const points = items.map((it:any) => ({ x: new Date(it.recorded_at).getTime(), y: Number(Object.values(it.vals)[0]) }));
     const svg = makeSimpleSVG(points);
     body += `<h2>${ptype}</h2>${svg}<ul>`;
-    items.forEach((it:any) => { body += `<li>${new Date(it.recorded_at).toLocaleString()}: ${JSON.stringify(it.values)}</li>`; });
+    items.forEach((it:any) => { body += `<li>${new Date(it.recorded_at).toLocaleString()}: ${JSON.stringify(it.vals)}</li>`; });
     body += `</ul>`;
   }
 

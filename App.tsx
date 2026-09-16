@@ -10,6 +10,8 @@ import ReportScreen from './src/screens/ReportScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import BackupScreen from './src/screens/BackupScreen';
 import ProfileContextProvider, { useProfile } from './src/services/profileContext';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import { colors, typography } from './src/theme/tokens';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -18,11 +20,11 @@ function HeaderProfileSwitcher() {
   const { activeProfile, profiles } = useProfile();
   const navigation = useNavigation<any>();
   return (
-    <SafeAreaView style={{ backgroundColor: '#EAF6FF' }}>
+    <SafeAreaView style={{ backgroundColor: colors.primaryMuted }}>
       <View style={{ padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ fontSize: 18, fontWeight: '600' }}>{activeProfile?.name ?? 'No Profile'}</Text>
+        <Text style={typography.h2}>{activeProfile?.name ?? 'No Profile'}</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Profiles')}>
-          <Text style={{ color: '#0077CC' }}>{profiles.length > 0 ? 'Switch' : 'Add Profile'}</Text>
+          <Text style={{ color: colors.primary, fontWeight: '600' }}>{profiles.length > 0 ? 'Switch' : 'Add Profile'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -31,30 +33,32 @@ function HeaderProfileSwitcher() {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ProfileContextProvider>
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="MainTabs">
-              {() => (
-                <>
-                  <HeaderProfileSwitcher />
-                  <Tab.Navigator screenOptions={{ headerShown: false }}>
-                    <Tab.Screen name="Diary" component={DiaryScreen} />
-                    <Tab.Screen name="Chart" component={ChartScreen} />
-                    <Tab.Screen name="Report" component={ReportScreen} />
-                    <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: 'Settings' }} />
-                  </Tab.Navigator>
-                </>
-              )}
-            </Stack.Screen>
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="Backup" component={BackupScreen} />
-            <Stack.Screen name="DriveBackups" component={require('./src/screens/DriveBackupsScreen').default} />
-            <Stack.Screen name="Profiles" component={require('./src/screens/ProfileManager').default} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </ProfileContextProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ProfileContextProvider>
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="MainTabs">
+                {() => (
+                  <>
+                    <HeaderProfileSwitcher />
+                    <Tab.Navigator screenOptions={{ headerShown: false }}>
+                      <Tab.Screen name="Diary" component={DiaryScreen} />
+                      <Tab.Screen name="Chart" component={ChartScreen} />
+                      <Tab.Screen name="Report" component={ReportScreen} />
+                      <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: 'Settings' }} />
+                    </Tab.Navigator>
+                  </>
+                )}
+              </Stack.Screen>
+              <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen name="Backup" component={BackupScreen} />
+              <Stack.Screen name="DriveBackups" component={require('./src/screens/DriveBackupsScreen').default} />
+              <Stack.Screen name="Profiles" component={require('./src/screens/ProfileManager').default} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </ProfileContextProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

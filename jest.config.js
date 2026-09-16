@@ -7,7 +7,7 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|victory|victory-native|expo|@expo|@react-navigation)/)'
+    'node_modules/(?!(react-native|@react-native|victory|victory-native|expo|@expo|@react-navigation|uuid)/)'
   ],
   testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/']
   ,
@@ -18,6 +18,8 @@ module.exports = {
     '^expo-auth-session$': '<rootDir>/__mocks__/expo-auth-session.js',
     '^expo-file-system$': '<rootDir>/__mocks__/expo-file-system.js',
     '^expo-sharing$': '<rootDir>/__mocks__/expo-sharing.js',
-    '^expo-document-picker$': '<rootDir>/__mocks__/expo-document-picker.js'
+    '^expo-document-picker$': '<rootDir>/__mocks__/expo-document-picker.js',
+    '^expo-print$': '<rootDir>/__mocks__/expo-print.js',
+    '^expo-local-authentication$': '<rootDir>/__mocks__/expo-local-authentication.js'
   }
 };

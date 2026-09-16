@@ -1,4 +1,4 @@
-import { rangeStart, filterByRange, mgdlToMmolL, mmolLToMgdl, classifyBP, daysSince } from '../src/services/utils';
+import { rangeStart, filterByRange, mgdlToMmolL, mmolLToMgdl, classifyBP, classifyGlucose, clinicalColorKey, daysSince } from '../src/services/utils';
 
 test('rangeStart produces reasonable dates', () => {
   const r7 = rangeStart('7');
@@ -22,4 +22,19 @@ test('bp classification', () => {
 
 test('daysSince handles null', () => {
   expect(daysSince(null)).toBeGreaterThan(1000000);
+});
+
+test('glucose classification', () => {
+  expect(classifyGlucose(65)).toBe('low');
+  expect(classifyGlucose(100)).toBe('normal');
+  expect(classifyGlucose(150)).toBe('elevated');
+  expect(classifyGlucose(200)).toBe('high');
+});
+
+test('clinicalColorKey maps classifications to the expected color token', () => {
+  expect(clinicalColorKey('normal')).toBe('success');
+  expect(clinicalColorKey('elevated')).toBe('warning');
+  expect(clinicalColorKey('high')).toBe('danger');
+  expect(clinicalColorKey('hypertensive-crisis')).toBe('danger');
+  expect(clinicalColorKey('low')).toBe('danger');
 });
