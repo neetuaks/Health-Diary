@@ -1,7 +1,9 @@
 # Health Diary — Project Context for Claude Code
 
 Privacy-first, offline-first Expo/React Native app for logging Blood Pressure and glucose
-readings into local SQLite, with encrypted local/Google Drive backup. No backend, no analytics,
+readings into local SQLite, with encrypted local backup (an automatic on-device safety copy,
+plus explicit share/export via the OS share sheet — no Google Drive integration; see
+`docs/PRODUCT-SPEC.md`'s Backup & Restore section). No backend, no analytics,
 no accounts — see the constraints below before writing any code that touches data flow.
 
 - Full product/UX requirements: [`docs/PRODUCT-SPEC.md`](docs/PRODUCT-SPEC.md)

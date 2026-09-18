@@ -17,9 +17,11 @@ module.exports = {
     '^expo-crypto$': '<rootDir>/__mocks__/expo-crypto.js',
     '^expo-auth-session$': '<rootDir>/__mocks__/expo-auth-session.js',
     '^expo-file-system$': '<rootDir>/__mocks__/expo-file-system.js',
+    '^expo-file-system/legacy$': '<rootDir>/__mocks__/expo-file-system.js',
     '^expo-sharing$': '<rootDir>/__mocks__/expo-sharing.js',
     '^expo-document-picker$': '<rootDir>/__mocks__/expo-document-picker.js',
     '^expo-print$': '<rootDir>/__mocks__/expo-print.js',
-    '^expo-local-authentication$': '<rootDir>/__mocks__/expo-local-authentication.js'
+    '^expo-local-authentication$': '<rootDir>/__mocks__/expo-local-authentication.js',
+    '^expo-mail-composer$': '<rootDir>/__mocks__/expo-mail-composer.js'
   }
 };

@@ -18,6 +18,27 @@ export type FieldDefinition = {
   max?: number | null;
   required?: boolean;
   options?: string[] | null;
+  // Display text per option value, for an enum whose stored value should be short
+  // (e.g. 'fasting') but whose on-screen label should spell the full clinical term
+  // out (e.g. "Fasting Plasma Glucose (FPG)"). Falls back to the raw option string
+  // when unset.
+  optionLabels?: Record<string, string> | null;
+  // Compact per-option label for narrow table columns (Diary/Report/PDF), where the
+  // full optionLabels text would overflow (e.g. 'FPG' instead of "Fasting Plasma
+  // Glucose (FPG)"). Falls back to optionLabels, then the raw option string.
+  optionShortLabels?: Record<string, string> | null;
+  // Include this non-numeric field as its own column in the compact Diary/Report
+  // tables (numeric fields are always included; this opts a specific enum/text
+  // field in too — e.g. Glucose's "Test Type" — without pulling in every enum
+  // field on every parameter type, like BP's "Arm").
+  showInList?: boolean;
+  // Marks an enum field whose values should split the Chart tab into separate
+  // lines/legend entries instead of one combined line — e.g. Glucose's "Test Type"
+  // produces a Fasting line and an OGTT line rather than mixing both onto one,
+  // since they're on different clinical scales. Only meaningful on a parameter type
+  // with exactly one numeric field; ignored otherwise.
+  groupChartBy?: boolean;
+  default?: string | number | null;
 };
 
 export type ParameterType = {
@@ -36,6 +57,6 @@ export type Reading = {
   recorded_at: string;
   created_at: string;
   source: 'manual' | 'photo' | 'bluetooth';
-  values: Record<string, any>;
+  vals: Record<string, any>;
   notes?: string | null;
 };

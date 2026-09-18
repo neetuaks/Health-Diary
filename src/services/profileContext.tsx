@@ -5,33 +5,45 @@ import { getDB } from '../db/init';
 
 type ProfileContextType = {
   profiles: Profile[];
+  // True until the initial profiles query resolves — lets callers (e.g. the
+  // first-run new-vs-existing-key prompt) avoid treating "still loading" the
+  // same as "genuinely zero profiles".
+  loading: boolean;
   activeProfile?: Profile | null;
   addProfile: (p: Partial<Profile>) => Promise<Profile>;
   setActiveProfile: (id: string | null) => void;
   editProfile: (id: string, updates: Partial<Profile>) => Promise<void>;
   deleteProfile: (id: string) => Promise<void>;
+  // Re-reads profiles from the DB — needed after a restore writes rows
+  // directly via SQL rather than through addProfile, which the context
+  // otherwise has no way to know about.
+  reloadProfiles: () => Promise<void>;
 };
 
 const ProfileContext = createContext<ProfileContextType>({
   profiles: [],
+  loading: true,
   addProfile: async () => { throw new Error('uninitialized'); },
   setActiveProfile: () => {},
   editProfile: async () => { throw new Error('uninitialized'); },
-  deleteProfile: async () => { throw new Error('uninitialized'); }
+  deleteProfile: async () => { throw new Error('uninitialized'); },
+  reloadProfiles: async () => { throw new Error('uninitialized'); }
 });
 
 export default function ProfileContextProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const reloadProfiles = async () => {
     const db = getDB();
-    db.getAllAsync<Profile>('SELECT * FROM profiles;').then(rows => {
-      setProfiles(rows);
-      if (rows.length > 0 && !activeProfileId) {
-        setActiveProfileId(rows[0].id);
-      }
-    }).catch(err => console.error(err));
+    const rows = await db.getAllAsync<Profile>('SELECT * FROM profiles;');
+    setProfiles(rows);
+    setActiveProfileId(prev => (prev && rows.some(r => r.id === prev)) ? prev : (rows[0]?.id ?? null));
+  };
+
+  useEffect(() => {
+    reloadProfiles().catch(err => console.error(err)).finally(() => setLoading(false));
   }, []);
 
   const addProfile = async (p: Partial<Profile>) => {
@@ -83,7 +95,7 @@ export default function ProfileContextProvider({ children }: { children: React.R
   const activeProfile = profiles.find(p => p.id === activeProfileId) ?? null;
 
   return (
-    <ProfileContext.Provider value={{ profiles, activeProfile, addProfile, setActiveProfile, editProfile, deleteProfile }}>
+    <ProfileContext.Provider value={{ profiles, loading, activeProfile, addProfile, setActiveProfile, editProfile, deleteProfile, reloadProfiles }}>
       {children}
     </ProfileContext.Provider>
   );

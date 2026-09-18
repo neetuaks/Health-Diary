@@ -1,11 +1,23 @@
 import { getDB } from '../db/init';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { generateRecoveryKey, deriveKeyFromRecovery, encryptPayload, storeRecoveryKeyOnDevice, getStoredRecoveryKey, decryptPayload } from './crypto';
 import { fetchParameterTypes } from './parameterRegistry';
+import { writeBackupToConfiguredDestinations, WriteResult, localBackupPath } from './backupDestinations';
 
-export async function createEncryptedBackup(allProfiles = true) {
+const BACKUP_FILENAME = 'healthdiary_backup.json';
+
+export interface CreateBackupResult {
+  uri: string;
+  destinations: WriteResult;
+}
+
+// Returns the created file's uri rather than sharing it directly — creating and
+// sharing are two separate user actions (see BackupScreen), so the user gets a
+// clear "backup created" confirmation independent of whatever they do in the OS
+// share sheet afterward, and a share-step issue can't be mistaken for backup
+// creation itself failing. Also writes the same content to the always-on local
+// safety copy (see backupDestinations.ts), identical on iOS and Android.
+export async function createEncryptedBackup(): Promise<CreateBackupResult> {
   // Generate recovery key if none stored
   let recovery = await getStoredRecoveryKey();
   if (!recovery) {
@@ -33,8 +45,14 @@ export async function createEncryptedBackup(allProfiles = true) {
     nonce: Buffer.from(nonce).toString('hex'),
     ciphertext: Buffer.from(box).toString('hex')
   };
-  const path = FileSystem.cacheDirectory + 'healthdiary_backup.hdb';
-  await FileSystem.writeAsStringAsync(path, JSON.stringify(container), { encoding: FileSystem.EncodingType.UTF8 });
+  // A custom, unrecognized extension like the old ".hdb" made the file appear as
+  // an unopenable/unrecognized blob to other apps' pickers (WhatsApp, Drive,
+  // Files) — hard to pick back up later even though the content is plain JSON
+  // (just an encrypted payload inside it). ".json" is honest about the format and
+  // is broadly recognized/previewable everywhere.
+  const containerJson = JSON.stringify(container);
+  const path = FileSystem.cacheDirectory + BACKUP_FILENAME;
+  await FileSystem.writeAsStringAsync(path, containerJson, { encoding: FileSystem.EncodingType.UTF8 });
 
   // Update last_backup_at for profiles included
   const now = new Date().toISOString();
@@ -42,7 +60,45 @@ export async function createEncryptedBackup(allProfiles = true) {
     await db.runAsync('UPDATE profiles SET last_backup_at = ? WHERE id = ?;', [now, p.id]);
   }
 
-  await Sharing.shareAsync(path);
+  const destinations = await writeBackupToConfiguredDestinations(containerJson, BACKUP_FILENAME);
+
+  return { uri: path, destinations };
+}
+
+// Backs the "restore automatically" path in BackupScreen: if this device
+// already made a backup, its content is read straight from the app's own
+// storage — no file picker, no need for the user to know or remember where a
+// backup file might be. Returns null (not an error) when there's nothing to
+// find, e.g. a genuinely new device/install.
+export async function readLocalBackupCopy(): Promise<string | null> {
+  const path = localBackupPath(BACKUP_FILENAME);
+  const info = await FileSystem.getInfoAsync(path);
+  if (!info.exists) return null;
+  return FileSystem.readAsStringAsync(path, { encoding: FileSystem.EncodingType.UTF8 });
+}
+
+export async function localBackupCopyExists(): Promise<boolean> {
+  const info = await FileSystem.getInfoAsync(localBackupPath(BACKUP_FILENAME));
+  return info.exists;
+}
+
+// "Delete My Data (All)" is supposed to mean the data is actually gone — the
+// local safety copy and the shareable cache-directory copy are both still
+// encrypted data sitting on the device, so deleting only the DB rows while
+// leaving those behind isn't a full deletion. The Recovery Key itself is
+// deliberately untouched — it's device/install setup, not user data, and
+// leaving it means it's still there if the user restores from an external
+// backup afterward.
+export async function deleteAllLocalBackupFiles(): Promise<void> {
+  const paths = [localBackupPath(BACKUP_FILENAME), FileSystem.cacheDirectory + BACKUP_FILENAME];
+  for (const path of paths) {
+    try {
+      const info = await FileSystem.getInfoAsync(path);
+      if (info.exists) await FileSystem.deleteAsync(path, { idempotent: true });
+    } catch (e) {
+      // best-effort — a leftover file here isn't worth failing the whole delete-all action over
+    }
+  }
 }
 
 export async function peekEncryptedBackup(containerJson: string, recoveryKey?: string) {

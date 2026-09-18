@@ -1,4 +1,4 @@
-import { createEncryptedBackup, restoreEncryptedBackupFromFile } from '../src/services/backup';
+import { createEncryptedBackup, restoreEncryptedBackupFromFile, readLocalBackupCopy, localBackupCopyExists } from '../src/services/backup';
 
 jest.mock('../src/db/init', () => require('../__mocks__/fakeDb'));
 
@@ -9,6 +9,8 @@ describe('backup service roundtrip against real db column names', () => {
   beforeEach(() => {
     __fakeDb._reset();
     FileSystem.writeAsStringAsync.mockClear();
+    FileSystem.getInfoAsync.mockClear();
+    FileSystem.readAsStringAsync.mockClear();
   });
 
   test('createEncryptedBackup + restoreEncryptedBackupFromFile preserves reading vals', async () => {
@@ -30,7 +32,10 @@ describe('backup service roundtrip against real db column names', () => {
 
     await createEncryptedBackup();
 
-    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledTimes(1);
+    // Two writes: the shareable cache-directory copy (this test's concern), plus
+    // the always-on, invisible local safety copy every backup also gets now (see
+    // backupDestinations.ts) — the cache-directory write happens first.
+    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledTimes(2);
     const [, containerJson] = FileSystem.writeAsStringAsync.mock.calls[0];
     expect(containerJson).toBeTruthy();
 
@@ -46,5 +51,40 @@ describe('backup service roundtrip against real db column names', () => {
 
     const persisted = await __fakeDb.getAllAsync('SELECT * FROM readings;');
     expect(JSON.parse(persisted[0].vals)).toEqual({ systolic: 120, diastolic: 80 });
+  });
+});
+
+describe('readLocalBackupCopy', () => {
+  beforeEach(() => {
+    FileSystem.getInfoAsync.mockClear();
+    FileSystem.readAsStringAsync.mockClear();
+  });
+
+  test('returns null when no local backup file exists', async () => {
+    FileSystem.getInfoAsync.mockResolvedValueOnce({ exists: false });
+    const content = await readLocalBackupCopy();
+    expect(content).toBeNull();
+    expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
+  });
+
+  test('returns the file content when a local backup exists', async () => {
+    FileSystem.getInfoAsync.mockResolvedValueOnce({ exists: true });
+    FileSystem.readAsStringAsync.mockResolvedValueOnce('{"version":1}');
+    const content = await readLocalBackupCopy();
+    expect(content).toBe('{"version":1}');
+  });
+});
+
+describe('localBackupCopyExists', () => {
+  beforeEach(() => {
+    FileSystem.getInfoAsync.mockClear();
+  });
+
+  test('reflects whether the local backup file is present', async () => {
+    FileSystem.getInfoAsync.mockResolvedValueOnce({ exists: false });
+    expect(await localBackupCopyExists()).toBe(false);
+
+    FileSystem.getInfoAsync.mockResolvedValueOnce({ exists: true });
+    expect(await localBackupCopyExists()).toBe(true);
   });
 });

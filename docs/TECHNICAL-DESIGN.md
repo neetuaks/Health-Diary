@@ -25,7 +25,6 @@ flowchart LR
     Services --> SecureStore[(SecureStore)]
     Services --> NativeOCR[Native OCR Modules]
     Services --> OSShare[OS Share Sheet]
-    Services --> Drive[Google Drive appDataFolder]
 ```
 
 ### Technology inventory
@@ -56,10 +55,13 @@ flowchart LR
 | `src/services/readingService.ts` | Reading CRUD and JSON value decoding |
 | `src/services/parameterRegistry.ts` | Parameter type reads and field-definition decoding |
 | `src/services/backup.ts` | Encrypted local backup creation, preview, and restore |
+| `src/services/backupDestinations.ts` | Writes the always-on local safety copy (no cloud destinations) |
+| `src/services/onboarding.ts` | Persists the first-run "new vs. existing user" choice |
+| `src/services/pickAndReadBackupFile.ts` | Shared DocumentPicker + Android-read-bug-workaround for restore |
+| `src/services/dataManager.ts` | Delete-all-data, including local backup files when asked |
 | `src/services/crypto.ts` | Recovery key, PBKDF2, secretbox, SecureStore access |
 | `src/services/ocr.ts` | Native OCR dispatch and fallback boundary |
 | `src/services/ocrParsing.ts` | JavaScript OCR text parsing heuristics |
-| `src/services/googleDriveBackup.ts` | PKCE OAuth, token refresh, Drive upload/list/delete |
 | `src/services/dataExport.ts` | Plain JSON and CSV exports |
 | `src/services/pdf.ts` | HTML/SVG report generation and PDF sharing |
 | `src/services/diagnosticsLog.ts` | Local diagnostic log and sharing |
@@ -124,7 +126,6 @@ flowchart TD
     Main --> SettingsTab[Settings tab]
     Root --> Settings[Settings stack screen]
     Root --> Backup[Backup]
-    Root --> Drive[DriveBackups]
     Root --> Profiles[Profiles]
     Header --> Profiles
     Diary --> Backup
@@ -273,10 +274,10 @@ flowchart LR
     Secret --> Encrypt
     Salt[Random salt] --> Container
     Nonce[Random nonce] --> Container
-    Encrypt --> Container[Versioned .hdb container]
-    Container --> Share[OS share sheet]
-    Container --> Drive[Optional Google Drive appDataFolder]
-    Restore[Selected .hdb] --> Decrypt[Derive + secretbox.open]
+    Encrypt --> Container[Versioned .json container]
+    Container --> LocalCopy[Always-on local safety copy]
+    Container --> Share[OS share sheet, explicit user action]
+    Restore[Selected backup file, or the local safety copy] --> Decrypt[Derive + secretbox.open]
     Secret --> Decrypt
     Decrypt --> Conflict[Conflict detection]
     Conflict --> Merge[Insert or replace by ID]
@@ -302,52 +303,61 @@ flowchart LR
 4. Parse JSON columns and serialize the payload.
 5. Derive a key with PBKDF2-SHA256, 100,000 iterations.
 6. Encrypt with TweetNaCl secretbox and a random nonce.
-7. Write `healthdiary_backup.hdb` to the cache directory.
-8. Share the file through the OS.
+7. Write `healthdiary_backup.json` to the cache directory (the shareable copy).
+8. Write the same content to the always-on local safety copy (`backupDestinations.ts`).
 9. Update `profiles.last_backup_at`.
+10. Sharing through the OS is a separate, later user action ("Share / Save Backup"), not part of creation.
 
 ### Restore
 
-1. Pick a file with DocumentPicker.
-2. Read the container JSON.
+1. If the device already has a local safety copy (and thus the recovery key already stored), restore it directly — no picker, no key entry.
+2. Otherwise, pick a file with DocumentPicker and read it via `pickAndReadBackupFile.ts` (Base64-then-decode, working around a still-open Android `expo-file-system` read bug), with the user typing their Recovery Key.
 3. Decrypt and parse the payload.
 4. Query local profile IDs.
 5. If conflicts exist, show `RestoreOptionsModal`.
 6. Merge uses `INSERT OR REPLACE` by ID. Replace deletes readings and profiles first.
-7. Restore parameter types, profiles, and readings.
+7. Restore parameter types, profiles, and readings, then reload the profile context so the UI reflects the restored data immediately.
 
 ### Backup debugging
 
 - `no PRNG`: confirm `react-native-get-random-values` is imported before the app and TweetNaCl.
 - `Buffer is not defined`: confirm the `buffer` polyfill in `index.js`.
 - Decryption failure: check the recovery key, salt, nonce, ciphertext, and container version.
-- Restore reports success but UI is stale: reload the active profile/readings after restore.
-- Google Drive upload fails: validate OAuth client ID, redirect URI, token expiry, and SecureStore contents.
-- Do not log recovery keys, access tokens, plaintext payloads, or decrypted backup contents.
+- Restore reports success but UI is stale: confirm the restore path calls `reloadProfiles()` from `profileContext.tsx`.
+- Manual restore "file isn't readable" on Android: known upstream `expo-file-system`/`expo-document-picker` bug (see comments in `pickAndReadBackupFile.ts`); not something to "fix" as app logic.
+- Do not log recovery keys, plaintext payloads, or decrypted backup contents.
 
-## 10. Google Drive Flow
+## 10. Local Backup Safety Copy and First-Run Onboarding
+
+There is no cloud backup integration (Google Drive or otherwise) — an earlier OAuth-based Drive integration (`googleDriveBackup.ts`, `DriveBackupsScreen.tsx`) was fully removed in favor of two simpler, platform-identical mechanisms:
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Settings as SettingsScreen
-    participant Auth as Google OAuth
-    participant Store as SecureStore
-    participant Drive as Google Drive
+    participant Profiles as ProfileManager
+    participant Modal as FirstRunKeyChoiceModal
+    participant Crypto as crypto.ts
+    participant Backup as backup.ts
+    participant Dest as backupDestinations.ts
 
-    User->>Settings: Connect Google Drive
-    Settings->>Auth: Start PKCE authorization
-    Auth-->>Settings: Authorization code
-    Settings->>Drive: Exchange code for tokens
-    Drive-->>Settings: Access/refresh tokens
-    Settings->>Store: Store token payload
-    User->>Settings: Upload encrypted backup
-    Settings->>Settings: Create local encrypted .hdb
-    Settings->>Drive: Multipart upload to appDataFolder
-    Drive-->>Settings: File ID
+    User->>Profiles: Open Profiles with zero profiles, no onboarding choice yet
+    Profiles->>Modal: Show first-run prompt
+    alt New user
+        Modal->>Modal: Record 'new' choice; key generated later on Backup screen
+    else Existing user
+        Modal->>Crypto: storeRecoveryKeyOnDevice(key), setRecoveryKeyConfirmed(true)
+        opt Has the backup file handy
+            Modal->>Backup: restoreEncryptedBackupFromFile(content, key)
+        end
+    end
+    User->>Backup: Back Up Data
+    Backup->>Dest: writeBackupToConfiguredDestinations(content, filename)
+    Dest->>Dest: Write to documentDirectory/backups/ (always, both platforms)
 ```
 
-`GOOGLE_CLIENT_ID` in `src/services/googleDriveBackup.ts` is currently a placeholder. Google Drive cannot work until it is configured for the target environment. The appDataFolder scope limits visibility to this app's private application data area.
+- `backupDestinations.ts`'s local safety copy is unconditional and invisible — no folder picker, no per-platform branching (unlike the removed SAF-based Drive-folder design, this needs nothing platform-specific). It is what `readLocalBackupCopy()` / `localBackupCopyExists()` check for automatic restore.
+- The recovery key itself is never regenerated automatically — `crypto.ts`'s `getRecoveryKeyConfirmed`/`setRecoveryKeyConfirmed` track a persisted confirmation flag (not just "a key exists") so Backup & Restore only reveals the key text again if the user explicitly says they haven't saved it.
+- `onboarding.ts` persists the new-vs-existing choice once, keyed off "zero profiles and no choice recorded yet" in `ProfileManager.tsx` — not an app-wide launch gate, and not re-triggered by `deleteAllData()` (device/install history, not data state).
 
 ## 11. Reports, Charts, and Exports
 
@@ -414,7 +424,6 @@ Use `npx expo export --platform android` as the definitive JavaScript syntax/mod
 | `undefined is not a function` in navigation | Navigator import/API mismatch | `App.tsx` navigator factory imports |
 | `NativeModules.X is undefined` | Native binary/config plugin | Prebuild, native registration, rebuild; do not blame JS first |
 | Permission denied | Device permission state | OS settings and permission request result |
-| OAuth redirect/token error | Google configuration | Client ID, redirect URI, scopes, token expiry |
 | `Buffer` / `no PRNG` | Runtime polyfill initialization | `index.js` import order |
 | Tests pass but device fails | Mock/native gap | Run Android export and a native build/device check |
 
@@ -440,12 +449,15 @@ Do not delete the SQLite database or SecureStore values during a data-loss inves
 
 ### Current automated coverage
 
-- Crypto round-trip and wrong-key failure.
-- Encrypted backup restore path.
+- Crypto round-trip, wrong-key failure, and recovery-key confirmation-flag persistence.
+- Encrypted backup creation/restore round-trip, local safety copy, and destination write-result handling.
+- First-run onboarding choice persistence, and the shared DocumentPicker-read-with-retry helper.
+- Delete-all-data (DB rows plus conditional local backup file deletion; Recovery Key untouched).
 - OCR parsing and native OCR fallback behavior.
-- Utility functions.
-- Google Drive service behavior with mocks.
+- PDF generation (report and recovery-key PDF) and diagnostics email/share fallback.
+- Utility functions and unencrypted data export (JSON/CSV).
 - Placeholder E2E test.
+- All of the above is service/utility-level only — see "Known test gaps" below for UI-layer coverage.
 
 ### Required validation for a change
 
@@ -457,7 +469,6 @@ Do not delete the SQLite database or SecureStore values during a data-loss inves
 | OCR JavaScript | OCR parsing tests and Android export |
 | Native OCR | Prebuild plus Android/iOS native build and device test |
 | Navigation | Android export plus manual screen navigation |
-| Google Drive | Mock tests plus configured-device OAuth test |
 | Build configuration | Android export and native build |
 
 ### Known test gaps
@@ -470,9 +481,9 @@ Do not delete the SQLite database or SecureStore values during a data-loss inves
 
 ## 15. Security and Privacy Boundaries
 
-- Local SQLite data is not encrypted by this design; encrypted protection begins when creating a `.hdb` backup.
+- Local SQLite data is not encrypted by this design; encrypted protection begins when creating a `.json` backup container.
 - Plain JSON/CSV exports are intentionally unencrypted and must be treated as sensitive.
-- Recovery keys and Google tokens must never be logged.
+- Recovery keys must never be logged.
 - Backup files contain profiles and readings; sharing or uploading is an explicit user action.
 - The app has no analytics, account system, or automatic upload path.
 - Formal HIPAA/GDPR compliance still requires legal and operational review beyond this codebase.

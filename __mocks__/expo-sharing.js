@@ -1,4 +1,4 @@
 module.exports = {
-  isAvailableAsync: async () => false,
-  shareAsync: async () => {}
+  isAvailableAsync: jest.fn(async () => true),
+  shareAsync: jest.fn(async () => {})
 };

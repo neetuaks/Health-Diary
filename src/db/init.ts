@@ -3,7 +3,7 @@ import { seedParameterTypes } from './seed';
 
 const db = SQLite.openDatabaseSync('healthdiary.db');
 
-export function initDB() {
+export async function initDB() {
   try {
     db.execSync(`CREATE TABLE IF NOT EXISTS profiles (
       id TEXT PRIMARY KEY,
@@ -30,9 +30,11 @@ export function initDB() {
       recorded_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
       source TEXT NOT NULL,
-      values TEXT NOT NULL,
+      vals TEXT NOT NULL,
       notes TEXT
     );`);
+
+    
 
     seedParameterTypes(db);
   } catch (err) {

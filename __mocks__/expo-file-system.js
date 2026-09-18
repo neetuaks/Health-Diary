@@ -1,7 +1,17 @@
 module.exports = {
   cacheDirectory: '/tmp/',
-  getInfoAsync: async (uri) => ({ exists: false }),
-  readAsStringAsync: async (uri, opts) => '',
+  documentDirectory: '/tmp/doc/',
+  getInfoAsync: jest.fn(async (uri) => ({ exists: false })),
+  readAsStringAsync: jest.fn(async (uri, opts) => ''),
   writeAsStringAsync: jest.fn(async (uri, content, opts) => {}),
-  EncodingType: { Base64: 'base64', UTF8: 'utf8' }
+  copyAsync: jest.fn(async ({ from, to }) => {}),
+  makeDirectoryAsync: jest.fn(async (uri, opts) => {}),
+  deleteAsync: jest.fn(async (uri, opts) => {}),
+  EncodingType: { Base64: 'base64', UTF8: 'utf8' },
+  File: jest.fn().mockImplementation((uri) => ({ uri, text: jest.fn(async () => '') })),
+  StorageAccessFramework: {
+    requestDirectoryPermissionsAsync: jest.fn(async () => ({ granted: true, directoryUri: 'content://mock/tree/primary' })),
+    createFileAsync: jest.fn(async (parentUri, name, mimeType) => `${parentUri}/${name}`),
+    writeAsStringAsync: jest.fn(async (uri, content, opts) => {}),
+  },
 };

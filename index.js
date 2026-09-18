@@ -1,3 +1,5 @@
+import './polyfills';
+
 import 'react-native-get-random-values';
 import { Buffer } from 'buffer';
 // Hermes/React Native has no global Buffer; several services (crypto, backups) rely on it.

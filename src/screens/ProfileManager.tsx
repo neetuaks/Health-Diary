@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, TextInput, Modal, Alert, Platform, StyleSheet } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useProfile } from '../services/profileContext';
 import { ageFromDOB } from '../services/utils';
+import { getOnboardingChoice, OnboardingChoice } from '../services/onboarding';
+import FirstRunKeyChoiceModal from '../components/FirstRunKeyChoiceModal';
 import { Screen, Button, Card, EmptyState } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
 import { Profile } from '../types';
@@ -18,10 +20,19 @@ type FormState = {
 const emptyForm: FormState = { name: '', date_of_birth: null, glucose_unit_pref: 'mg/dL', weight_unit_pref: 'kg' };
 
 export default function ProfileManager({ navigation }: any) {
-  const { profiles, addProfile, editProfile, deleteProfile, setActiveProfile } = useProfile();
+  const { profiles, loading, addProfile, editProfile, deleteProfile, setActiveProfile } = useProfile();
   const [modalOpen, setModalOpen] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+  // undefined = not checked yet; null = checked, no choice recorded (show the
+  // first-run prompt once profiles have finished loading and there are none).
+  const [onboardingChoice, setOnboardingChoiceState] = useState<OnboardingChoice | null | undefined>(undefined);
+
+  useEffect(() => {
+    getOnboardingChoice().then(setOnboardingChoiceState);
+  }, []);
+
+  const showFirstRunPrompt = !loading && profiles.length === 0 && onboardingChoice === null;
 
   const openAdd = () => { setForm(emptyForm); setModalOpen(true); };
 
@@ -38,6 +49,11 @@ export default function ProfileManager({ navigation }: any) {
 
   const save = async () => {
     if (!form.name.trim()) return Alert.alert('Name required');
+    // Required for new profiles — Pulse's age-banded reference range (see
+    // classifyPulse) needs a DOB to classify correctly, and this is the only point
+    // it's collected. Existing profiles created before this was enforced can still
+    // be edited without one, so they aren't retroactively locked out.
+    if (!form.id && !form.date_of_birth) return Alert.alert('Date of birth required', 'Please set a date of birth for the new profile.');
     const payload = {
       name: form.name.trim(),
       date_of_birth: form.date_of_birth ? form.date_of_birth.toISOString().slice(0, 10) : null,
@@ -77,9 +93,9 @@ export default function ProfileManager({ navigation }: any) {
                   {age !== null ? `${age} years old` : 'DOB not set'} · {item.glucose_unit_pref ?? 'mg/dL'} · {item.weight_unit_pref ?? 'kg'}
                 </Text>
               </TouchableOpacity>
-              <View style={{ flexDirection: 'row', gap: spacing.md }}>
-                <TouchableOpacity onPress={() => openEdit(item)}><Text style={{ color: colors.primary, fontWeight: '600' }}>Edit</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => remove(item)}><Text style={{ color: colors.danger, fontWeight: '600' }}>Delete</Text></TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <Button label="Edit" size="sm" variant="secondary" onPress={() => openEdit(item)} />
+                <Button label="Delete" size="sm" variant="destructive" onPress={() => remove(item)} />
               </View>
             </Card>
           );
@@ -96,7 +112,7 @@ export default function ProfileManager({ navigation }: any) {
           <Text style={[typography.bodyBold, styles.label]}>Name</Text>
           <TextInput placeholder="Name" value={form.name} onChangeText={t => setForm(f => ({ ...f, name: t }))} style={styles.input} />
 
-          <Text style={[typography.bodyBold, styles.label]}>Date of birth</Text>
+          <Text style={[typography.bodyBold, styles.label]}>Date of birth{!form.id ? <Text style={{ color: colors.danger }}> *</Text> : null}</Text>
           <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.input}>
             <Text>{form.date_of_birth ? form.date_of_birth.toLocaleDateString() : 'Not set'}</Text>
           </TouchableOpacity>
@@ -106,7 +122,8 @@ export default function ProfileManager({ navigation }: any) {
               mode="date"
               maximumDate={new Date()}
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={(_, d) => { setShowDatePicker(false); if (d) setForm(f => ({ ...f, date_of_birth: d })); }}
+              onValueChange={(_, d) => { setShowDatePicker(false); setForm(f => ({ ...f, date_of_birth: d })); }}
+              onDismiss={() => setShowDatePicker(false)}
             />
           )}
 
@@ -134,6 +151,11 @@ export default function ProfileManager({ navigation }: any) {
           </View>
         </Screen>
       </Modal>
+
+      <FirstRunKeyChoiceModal
+        visible={showFirstRunPrompt}
+        onDone={() => getOnboardingChoice().then(setOnboardingChoiceState)}
+      />
     </Screen>
   );
 }

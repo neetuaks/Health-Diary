@@ -13,7 +13,8 @@
       "package": "com.expo.HealthDiary"
     },
     "plugins": [
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "expo-mail-composer"
     ]
   }
 }

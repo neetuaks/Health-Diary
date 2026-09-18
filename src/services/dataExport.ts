@@ -1,6 +1,6 @@
 import { getDB } from '../db/init';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import { shareFile } from './share';
 
 export async function exportAllAsJSON() {
   const db = getDB();
@@ -12,7 +12,7 @@ export async function exportAllAsJSON() {
   const payload = { profiles, parameter_types: pts, readings };
   const path = FileSystem.cacheDirectory + 'healthdiary_export.json';
   await FileSystem.writeAsStringAsync(path, JSON.stringify(payload, null, 2), { encoding: FileSystem.EncodingType.UTF8 });
-  await Sharing.shareAsync(path);
+  await shareFile(path, 'Health Diary Export (JSON)', 'application/json');
 }
 
 export async function exportAllAsCSV() {
@@ -25,5 +25,5 @@ export async function exportAllAsCSV() {
   const csv = header.concat(lines).join('\n');
   const path = FileSystem.cacheDirectory + 'healthdiary_export.csv';
   await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
-  await Sharing.shareAsync(path);
+  await shareFile(path, 'Health Diary Export (CSV)', 'text/csv');
 }

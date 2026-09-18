@@ -1,3 +1,3 @@
 module.exports = {
-  getDocumentAsync: async () => ({ type: 'cancel' })
+  getDocumentAsync: jest.fn(async () => ({ canceled: true, assets: null }))
 };

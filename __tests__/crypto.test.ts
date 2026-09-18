@@ -1,4 +1,6 @@
-import { generateRecoveryKey, deriveKeyFromRecovery, encryptPayload, decryptPayload } from '../src/services/crypto';
+import { generateRecoveryKey, deriveKeyFromRecovery, encryptPayload, decryptPayload, getRecoveryKeyConfirmed, setRecoveryKeyConfirmed } from '../src/services/crypto';
+
+const SecureStore = require('expo-secure-store');
 
 describe('crypto utilities', () => {
   it('generates a recovery key with expected format', async () => {
@@ -23,5 +25,22 @@ describe('crypto utilities', () => {
     const out = decryptPayload(key, nonce, box);
     expect(out).not.toBeNull();
     expect(Buffer.from(out!).toString('utf8')).toBe('hello world');
+  });
+});
+
+describe('recovery key confirmation flag', () => {
+  beforeEach(async () => {
+    await SecureStore.deleteItemAsync('recovery_key_confirmed');
+  });
+
+  it('defaults to unconfirmed', async () => {
+    expect(await getRecoveryKeyConfirmed()).toBe(false);
+  });
+
+  it('persists true and false explicitly', async () => {
+    await setRecoveryKeyConfirmed(true);
+    expect(await getRecoveryKeyConfirmed()).toBe(true);
+    await setRecoveryKeyConfirmed(false);
+    expect(await getRecoveryKeyConfirmed()).toBe(false);
   });
 });

@@ -36,3 +36,15 @@ export async function storeRecoveryKeyOnDevice(recovery: string) {
 export async function getStoredRecoveryKey() {
   return await SecureStore.getItemAsync('recovery_key');
 }
+
+// Tracked separately from the key's mere presence — a key can be stored (e.g.
+// just generated) before the user has actually confirmed they saved a copy of
+// it somewhere safe. Drives whether Backup & Restore keeps showing the key
+// text or hides it once the user has confirmed.
+export async function getRecoveryKeyConfirmed(): Promise<boolean> {
+  return (await SecureStore.getItemAsync('recovery_key_confirmed')) === 'true';
+}
+
+export async function setRecoveryKeyConfirmed(confirmed: boolean) {
+  await SecureStore.setItemAsync('recovery_key_confirmed', String(confirmed));
+}
