@@ -6,7 +6,7 @@ import { fetchReadingsForProfile } from '../services/readingService';
 import { fetchParameterTypes } from '../services/parameterRegistry';
 import ReadingsChart from '../components/ReadingsChart';
 import { filterByRange, RangeKey, ageInMonthsFromDOB } from '../services/utils';
-import { Screen, SegmentedControl } from '../theme/components';
+import { Screen, SegmentedControl, EmptyState } from '../theme/components';
 import { spacing } from '../theme/tokens';
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
@@ -33,7 +33,10 @@ export default function ChartScreen() {
   // tab afterward (no real "cache," just stale state that nothing invalidated).
   useFocusEffect(
     useCallback(() => {
-      if (!activeProfile) return;
+      // Clear rather than just skip the fetch when there's no active profile
+      // (e.g. right after "Delete All Data") — otherwise whatever was last
+      // fetched for a now-gone profile just keeps rendering.
+      if (!activeProfile) { setReadings([]); return; }
       fetchReadingsForProfile(activeProfile.id).then(rs => setReadings(rs));
     }, [activeProfile])
   );
@@ -57,20 +60,26 @@ export default function ChartScreen() {
 
   return (
     <Screen scroll topInset={false}>
-      <View style={styles.toggleRow}>
-        <SegmentedControl
-          options={types.map((t: any) => ({ key: t.id, label: t.display_name }))}
-          value={selectedType ?? ''}
-          onChange={setSelectedType}
-        />
-      </View>
+      {!activeProfile ? (
+        <EmptyState title="No profile yet" subtitle="Add a profile to get started." />
+      ) : (
+        <>
+          <View style={styles.toggleRow}>
+            <SegmentedControl
+              options={types.map((t: any) => ({ key: t.id, label: t.display_name }))}
+              value={selectedType ?? ''}
+              onChange={setSelectedType}
+            />
+          </View>
 
-      <View style={{ marginBottom: spacing.lg }}>
-        <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
-      </View>
+          <View style={{ marginBottom: spacing.lg }}>
+            <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
+          </View>
 
-      {selectedType && (
-        <ReadingsChart readings={filtered} typeDef={typeDef} range={range} ageInMonths={ageInMonths} height={chartHeight} />
+          {selectedType && (
+            <ReadingsChart readings={filtered} typeDef={typeDef} range={range} ageInMonths={ageInMonths} height={chartHeight} />
+          )}
+        </>
       )}
     </Screen>
   );

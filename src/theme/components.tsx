@@ -178,13 +178,24 @@ export function EmptyState({ title, subtitle }: { title: string; subtitle?: stri
   );
 }
 
+const shadow = {
+  shadowColor: '#0B1A2B',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 6,
+  elevation: 2,
+};
+
 const buttonVariants: Record<ButtonVariant, { container: ViewStyle; label: TextStyle }> = {
   // Muted (soft-tinted background + dark-tinted text) rather than a solid fill —
   // calmer, per the "calm blue/green, red only for alerts" direction. Destructive
   // stays a solid fill deliberately: it's a safety-relevant action, not everyday CTA.
-  primary: { container: { backgroundColor: colors.primaryMuted }, label: { color: colors.primaryDark } },
-  secondary: { container: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primary }, label: { color: colors.primary } },
-  destructive: { container: { backgroundColor: colors.danger }, label: { color: colors.textOnPrimary } },
+  primary: { container: { backgroundColor: colors.primaryMuted, ...shadow }, label: { color: colors.primaryDark } },
+  secondary: { container: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primary, ...shadow }, label: { color: colors.primary } },
+  destructive: { container: { backgroundColor: colors.danger, ...shadow }, label: { color: colors.textOnPrimary } },
+  // No shadow: a ghost button has no fill, so the shared drop shadow would
+  // otherwise render as a fuzzy floating box around the text instead of a
+  // clean, borderless link.
   ghost: { container: { backgroundColor: 'transparent' }, label: { color: colors.primary } },
 };
 
@@ -194,18 +205,10 @@ const bannerVariants: Record<BannerVariant, { container: ViewStyle; text: TextSt
   danger: { container: { backgroundColor: colors.dangerBg }, text: { color: colors.danger } },
 };
 
-const shadow = {
-  shadowColor: '#0B1A2B',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.08,
-  shadowRadius: 6,
-  elevation: 2,
-};
-
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   screen: { flex: 1, backgroundColor: colors.background, padding: spacing.lg },
-  button: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', ...shadow },
+  button: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   buttonSm: { paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
   buttonDisabled: { opacity: 0.5, shadowOpacity: 0, elevation: 0 },
   buttonLabel: { fontSize: 15, fontWeight: '600' },

@@ -185,7 +185,9 @@ export default function DiaryScreen() {
               fetchReadingsForProfile(activeProfile.id).then(setReadings);
               setEditingReading(null);
             }}
-            onScanPhoto={() => { setModalVisible(false); setPhotoModalVisible(true); }}
+            // Camera/OCR entry is paused: NewRecordModal only shows its camera icon when
+            // onScanPhoto is passed. Re-add it to re-enable:
+            // onScanPhoto={() => { setModalVisible(false); setPhotoModalVisible(true); }}
           />
 
           <PhotoEntryModal visible={photoModalVisible} onClose={() => setPhotoModalVisible(false)} onSaved={() => {

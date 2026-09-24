@@ -9,7 +9,12 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!(react-native|@react-native|victory|victory-native|expo|@expo|@react-navigation|uuid)/)'
   ],
-  testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/']
+  // Component-level tests live under __tests__/components/ and run through
+  // jest.component.config.js (jest-expo preset) instead — this config's
+  // ts-jest/babel-jest setup has no Platform/NativeModules support and
+  // can't render RN components (see jest.component.config.js's header
+  // comment for why that's a separate config rather than merged in here).
+  testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/', '<rootDir>/__tests__/components/']
   ,
   setupFiles: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {

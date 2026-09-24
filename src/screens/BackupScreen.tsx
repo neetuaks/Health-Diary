@@ -33,6 +33,10 @@ export default function BackupScreen() {
   // restore can happen automatically without the user hunting for a file.
   const [hasLocalBackup, setHasLocalBackup] = useState(false);
   const [showManualRestore, setShowManualRestore] = useState(false);
+  // True for the whole span of a restore attempt — from the moment content is
+  // in hand through decrypt/merge/replace — so the buttons below can show
+  // "Restoring…" instead of leaving the user guessing whether anything's happening.
+  const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
     getStoredRecoveryKey().then(key => { if (key) setRecovery(key); });
@@ -153,13 +157,18 @@ export default function BackupScreen() {
   // device" in the first place.
   const handleRestoreFromLocal = async () => {
     if (!(await tryAuthenticate('Authenticate to restore your data'))) return;
-    const content = await readLocalBackupCopy();
-    if (!content) {
-      Alert.alert('No backup found', 'No automatic backup was found on this device.');
-      setHasLocalBackup(false);
-      return;
+    setRestoring(true);
+    try {
+      const content = await readLocalBackupCopy();
+      if (!content) {
+        Alert.alert('No backup found', 'No automatic backup was found on this device.');
+        setHasLocalBackup(false);
+        return;
+      }
+      await restoreFromContent(content, undefined);
+    } finally {
+      setRestoring(false);
     }
-    await restoreFromContent(content, undefined);
   };
 
   const handleRestore = async () => {
@@ -173,11 +182,17 @@ export default function BackupScreen() {
       Alert.alert('Could not read the backup file', e?.message ?? 'Please try again.');
       return;
     }
-    await restoreFromContent(content, keyToUse);
+    setRestoring(true);
+    try {
+      await restoreFromContent(content, keyToUse);
+    } finally {
+      setRestoring(false);
+    }
   };
 
   const handleRestoreChoice = async (choice: 'merge' | 'replace') => {
     if (!pendingRestoreContent) { setRestoreModalOpen(false); return; }
+    setRestoring(true);
     try {
       await restoreEncryptedBackupFromFile(pendingRestoreContent, pendingRestoreKey, { replace: choice === 'replace' });
       await reloadProfiles();
@@ -185,6 +200,7 @@ export default function BackupScreen() {
     } catch (e: any) {
       Alert.alert('Restore failed', e?.message ?? 'The Recovery Key may be wrong, or the file may be corrupted. Please check the key and try again.');
     } finally {
+      setRestoring(false);
       setRestoreModalOpen(false);
       setPendingRestoreContent(null);
       setPendingRestoreKey(undefined);
@@ -243,17 +259,25 @@ export default function BackupScreen() {
 
       <Card style={{ marginTop: spacing.lg }}>
         <Text style={typography.h2}>Restore from Backup</Text>
+        {restoring && <Banner variant="info" message="Restoring your data… this can take a moment, please don't close the app." />}
         {hasLocalBackup && !showManualRestore ? (
           <>
             <Text style={[typography.caption, { marginTop: spacing.xs }]}>
               This device already has a backup — restore it automatically, no file or key needed.
             </Text>
-            <Button label="Restore from Device Backup" variant="secondary" onPress={handleRestoreFromLocal} style={{ marginTop: spacing.md }} />
+            <Button
+              label={restoring ? 'Restoring…' : 'Restore from Device Backup'}
+              variant="secondary"
+              onPress={handleRestoreFromLocal}
+              disabled={restoring}
+              style={{ marginTop: spacing.md }}
+            />
             <Button
               label="Restore from a different backup file…"
               size="sm"
               variant="ghost"
               onPress={() => setShowManualRestore(true)}
+              disabled={restoring}
               style={{ marginTop: spacing.sm }}
             />
           </>
@@ -269,15 +293,23 @@ export default function BackupScreen() {
               onChangeText={setRestoreKeyInput}
               placeholder={recovery ? 'Recovery Key (optional on this device)' : 'Recovery Key'}
               autoCapitalize="none"
+              editable={!restoring}
               style={styles.input}
             />
-            <Button label="Choose Backup File & Restore" variant="secondary" onPress={handleRestore} style={{ marginTop: spacing.md }} />
+            <Button
+              label={restoring ? 'Restoring…' : 'Choose Backup File & Restore'}
+              variant="secondary"
+              onPress={handleRestore}
+              disabled={restoring}
+              style={{ marginTop: spacing.md }}
+            />
             {hasLocalBackup && (
               <Button
                 label="Back to automatic restore"
                 size="sm"
                 variant="ghost"
                 onPress={() => setShowManualRestore(false)}
+                disabled={restoring}
                 style={{ marginTop: spacing.sm }}
               />
             )}
@@ -285,7 +317,12 @@ export default function BackupScreen() {
         )}
       </Card>
 
-      <RestoreOptionsModal visible={restoreModalOpen} onClose={() => setRestoreModalOpen(false)} onChoose={choice => handleRestoreChoice(choice)} />
+      <RestoreOptionsModal
+        visible={restoreModalOpen}
+        onClose={() => setRestoreModalOpen(false)}
+        onChoose={choice => handleRestoreChoice(choice)}
+        busy={restoring}
+      />
     </Screen>
   );
 }

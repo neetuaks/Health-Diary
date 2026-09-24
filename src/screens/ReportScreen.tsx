@@ -41,7 +41,11 @@ export default function ReportScreen() {
   // plain useEffect(..., [activeProfile]) goes stale on a bottom-tab navigator.
   useFocusEffect(
     useCallback(() => {
-      if (activeProfile) fetchReadingsForProfile(activeProfile.id).then(setReadings);
+      // Clear rather than just skip the fetch when there's no active profile
+      // (e.g. right after "Delete All Data") — otherwise whatever was last
+      // fetched for a now-gone profile just keeps rendering. See ChartScreen.
+      if (!activeProfile) { setReadings([]); return; }
+      fetchReadingsForProfile(activeProfile.id).then(setReadings);
     }, [activeProfile])
   );
 

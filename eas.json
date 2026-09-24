@@ -1,7 +1,13 @@
 {
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
-      "workflow": "managed",
       "android": {
         "buildType": "app-bundle"
       }

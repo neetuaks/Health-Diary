@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Text, TextInput, Alert, StyleSheet } from 'react-native';
-import { storeRecoveryKeyOnDevice, setRecoveryKeyConfirmed } from '../services/crypto';
+import { generateRecoveryKey, getStoredRecoveryKey, storeRecoveryKeyOnDevice, setRecoveryKeyConfirmed } from '../services/crypto';
 import { restoreEncryptedBackupFromFile } from '../services/backup';
 import { pickAndReadBackupFile } from '../services/pickAndReadBackupFile';
 import { setOnboardingChoice } from '../services/onboarding';
@@ -22,9 +22,38 @@ export default function FirstRunKeyChoiceModal({ visible, onDone }: { visible: b
   const reset = () => { setStep('choice'); setKeyInput(''); };
 
   const chooseNew = async () => {
-    await setOnboardingChoice('new');
-    reset();
-    onDone();
+    // "I'm new" usually means there's nothing on this device yet, but a
+    // leftover key can still be here from before (e.g. Delete All Data
+    // deliberately keeps the key so old external backups stay restorable).
+    // Silently reusing it would skip the normal show-key/confirm flow for
+    // someone who just said they're new — so ask instead of assuming.
+    const existingKey = await getStoredRecoveryKey();
+    if (!existingKey) {
+      await setOnboardingChoice('new');
+      reset();
+      onDone();
+      return;
+    }
+
+    Alert.alert(
+      'Recovery Key already on this device',
+      "This device already has a Recovery Key from before (e.g. data you deleted earlier). Keep it so any backup file made with it can still be restored, or generate a new one for a clean start — backups made with the old key won't be restorable with a new one.",
+      [
+        { text: 'Keep existing key', onPress: async () => { await setOnboardingChoice('new'); reset(); onDone(); } },
+        {
+          text: 'Generate new key',
+          style: 'destructive',
+          onPress: async () => {
+            const key = await generateRecoveryKey();
+            await storeRecoveryKeyOnDevice(key);
+            await setRecoveryKeyConfirmed(false);
+            await setOnboardingChoice('new');
+            reset();
+            onDone();
+          }
+        },
+      ]
+    );
   };
 
   const chooseExisting = () => setStep('enterKey');

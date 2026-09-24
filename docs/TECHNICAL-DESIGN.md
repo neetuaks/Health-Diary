@@ -457,7 +457,9 @@ Do not delete the SQLite database or SecureStore values during a data-loss inves
 - PDF generation (report and recovery-key PDF) and diagnostics email/share fallback.
 - Utility functions and unencrypted data export (JSON/CSV).
 - Placeholder E2E test.
-- All of the above is service/utility-level only — see "Known test gaps" below for UI-layer coverage.
+- All of the above runs via `npm test` (`jest.config.js`, ts-jest/babel-jest, no real `Platform`/`NativeModules`) and is service/utility-level only.
+- **Component-level**: `npm run test:components` (`jest.component.config.js`, `jest-expo` preset + `@testing-library/react-native`) renders real screens/components against a real RN test environment. Currently covers `NewRecordModal` (required-field validation, out-of-range warnings, live BP classification, manual save, edit/update), `BackupScreen` (key reveal/hide/confirm state, automatic local restore vs. manual file+key restore), and `ConfirmDeleteAllModal` (DELETE-gated confirm, the separate "also delete local backup?" prompt only appearing when a backup exists). `npm run test:all` runs both suites. This is a separate, deliberately isolated config from `jest.config.js` — see that file's header comment for why (rendering needs a real Platform, the existing config's ts-jest/babel-jest setup doesn't provide one).
+  - Gotchas specific to this config's RTL version: `render()` and every `fireEvent.*` call return a Promise and must be `await`ed, or state updates race the next assertion; a `Text` label built from nested `<Text>` children (e.g. a field label plus a separately-styled required-asterisk `<Text>`) won't match `getByText('Label')` exactly — use a regex instead.
 
 ### Required validation for a change
 
@@ -468,6 +470,7 @@ Do not delete the SQLite database or SecureStore values during a data-loss inves
 | Encryption/backup | Crypto and restore tests with wrong-key and conflict cases |
 | OCR JavaScript | OCR parsing tests and Android export |
 | Native OCR | Prebuild plus Android/iOS native build and device test |
+| Screen/component behavior | Add or update a `jest.component.config.js` test alongside manual verification |
 | Navigation | Android export plus manual screen navigation |
 | Build configuration | Android export and native build |
 
@@ -475,7 +478,8 @@ Do not delete the SQLite database or SecureStore values during a data-loss inves
 
 - Expo Go cannot prove custom Vision/ML Kit native modules are present.
 - The E2E test is currently a placeholder, not a complete user workflow.
-- Jest emits an OCR warning because its mocked React Native environment does not provide a full `Platform`/`NativeModules` implementation.
+- Jest emits an OCR warning because its mocked React Native environment does not provide a full `Platform`/`NativeModules` implementation (service-level config only — the component-level config doesn't have this gap).
+- Component-level coverage is new and only spans 3 of 6 screens and 3 of 8 components (see above) — the rest (`ChartScreen`, `DiaryScreen`, `ProfileManager`, `ReportScreen`, `SettingsScreen`, `ErrorBoundary`, `FirstRunKeyChoiceModal`, `PhotoEntryModal`, `ReadingItem`, `ReadingsChart`, `RestoreOptionsModal`) still rely on manual/web-preview verification only.
 - There is no automated migration test for an existing SQLite database.
 - There is no crash-reporting or production telemetry by design.
 

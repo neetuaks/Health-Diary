@@ -11,6 +11,9 @@ export type OCRResult = {
   parameterType: 'bp' | 'glucose' | 'unknown';
   values: Record<string, any>;
   confidence: number; // 0-1
+  rawText?: string;
+  engine?: 'native' | 'stub';
+  nativeError?: string;
 };
 
 import { parseTextForReading } from './ocrParsing';
@@ -31,20 +34,30 @@ async function processImageForReadingStub(uri: string): Promise<OCRResult> {
  * - Android: implement a native module (e.g. `MLKitOCR`) that exposes a `process(uri)` method using Google ML Kit on-device Text Recognition.
  * The native module should return an object shaped like `OCRResult` and must NOT transmit images off-device.
  */
+// The native modules only need to be trusted for the recognized text; their
+// own regex parsing only understands "120/80" and misses the stacked
+// SYS / DIA / PULSE layout most BP monitors use, so all interpretation
+// happens here in JS (one shared, unit-tested parser for both platforms).
+function fromNative(res: any): OCRResult {
+  if (typeof res?.rawText === 'string') return { ...parseTextForReading(res.rawText), engine: 'native' };
+  return { ...(res as OCRResult), engine: 'native' };
+}
+
 export async function processImageForReading(uri: string): Promise<OCRResult> {
+  let nativeError: string | undefined;
   try {
     if (Platform.OS === 'ios' && (NativeModules as any).VisionOCR && typeof (NativeModules as any).VisionOCR.recognize === 'function') {
-      const res = await (NativeModules as any).VisionOCR.recognize(uri);
-      return res as OCRResult;
+      return fromNative(await (NativeModules as any).VisionOCR.recognize(uri));
     }
     if (Platform.OS === 'android' && (NativeModules as any).MLKitOCR && typeof (NativeModules as any).MLKitOCR.process === 'function') {
-      const res = await (NativeModules as any).MLKitOCR.process(uri);
-      return res as OCRResult;
+      return fromNative(await (NativeModules as any).MLKitOCR.process(uri));
     }
-  } catch (e) {
-    console.warn('Native OCR failed:', e);
+    nativeError = 'native OCR module not found';
+  } catch (e: any) {
+    nativeError = String(e?.message ?? e);
+    console.warn('Native OCR failed:', nativeError);
   }
   // fallback stub
-  return processImageForReadingStub(uri);
+  return { ...(await processImageForReadingStub(uri)), engine: 'stub', nativeError };
 }
 

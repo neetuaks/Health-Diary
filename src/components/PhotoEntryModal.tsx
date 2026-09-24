@@ -27,7 +27,11 @@ export default function PhotoEntryModal({ visible, onClose, onSaved }: { visible
         setBusy(false);
         return;
       }
-      const res = fromCamera ? await ImagePicker.launchCameraAsync({ quality: 0.8 }) : await ImagePicker.launchImageLibraryAsync({ quality: 0.8 });
+      // allowsEditing shows the OS crop step so the user can frame just the
+      // display — a tight crop gives OCR much larger, cleaner digits.
+      const res = fromCamera
+        ? await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: true })
+        : await ImagePicker.launchImageLibraryAsync({ quality: 1, allowsEditing: true });
       if (res.canceled || !res.assets || res.assets.length === 0) { setBusy(false); return; }
       const uri = res.assets[0].uri;
       // The photo itself is never persisted anywhere by this app — it's read
