@@ -5,8 +5,8 @@ export type OCRResult = {
   rawText?: string;
 };
 
-const validBP = (s: number, d: number) => s >= 60 && s <= 260 && d >= 30 && d <= 160 && s > d;
-const validPulse = (p: number) => p >= 30 && p <= 220;
+export const validBP = (s: number, d: number) => s >= 60 && s <= 260 && d >= 30 && d <= 160 && s > d;
+export const validPulse = (p: number) => p >= 30 && p <= 220;
 
 // Number following a label ("SYS mmHg 127"), or — if that yields nothing
 // usable — one preceding it ("127 SYS").
