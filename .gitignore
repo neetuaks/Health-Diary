@@ -1,1 +1,5 @@
 node_modules
+
+# Crowdsourced OCR research photos (~1.3 GB, third-party health data) — keep local only
+bp monitor_images/
+glucometer_images/

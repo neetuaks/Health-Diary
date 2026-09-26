@@ -1,4 +1,22 @@
-import { rangeStart, filterByRange, mgdlToMmolL, mmolLToMgdl, classifyBP, classifyGlucose, classifyPulse, clinicalColorKey, daysSince } from '../src/services/utils';
+import {
+  rangeStart,
+  filterByRange,
+  mgdlToMmolL,
+  mmolLToMgdl,
+  classifyBP,
+  classifyGlucose,
+  classifyPulse,
+  clinicalColorKey,
+  daysSince,
+  slugifyFieldKey,
+  fieldClassification,
+  startOfDay,
+  endOfDay,
+  startOfThisWeek,
+  startOfThisMonth,
+  startOfThisYear,
+  matchesDateRange
+} from '../src/services/utils';
 
 test('rangeStart produces reasonable dates', () => {
   const r7 = rangeStart('7');
@@ -36,6 +54,65 @@ test('glucose classification — fasting (diabetes.org FPG criteria)', () => {
   expect(classifyGlucose(90)).toBe('normal');
   expect(classifyGlucose(110)).toBe('prediabetes-range');
   expect(classifyGlucose(150)).toBe('diabetes-range');
+});
+
+test('slugifyFieldKey derives a snake_case key from a label', () => {
+  expect(slugifyFieldKey('Waist Circumference', [])).toBe('waist_circumference');
+});
+
+test('slugifyFieldKey falls back to "field" when the label has no valid characters', () => {
+  expect(slugifyFieldKey('%%%', [])).toBe('field');
+});
+
+test('slugifyFieldKey disambiguates case-insensitively against existing keys', () => {
+  expect(slugifyFieldKey('Weight', ['weight'])).toBe('weight_2');
+  expect(slugifyFieldKey('Weight', ['weight', 'weight_2'])).toBe('weight_3');
+});
+
+test('fieldClassification returns null for a custom parameter type (no clinical range known)', () => {
+  expect(fieldClassification('a-custom-uuid-1234', 'systolic', { systolic: 200 })).toBeNull();
+  expect(fieldClassification('a-custom-uuid-1234', 'value', { value: 9999 })).toBeNull();
+});
+
+test('startOfDay/endOfDay produce the correct day boundaries', () => {
+  const d = new Date('2024-03-15T14:30:00.000Z');
+  const start = startOfDay(d);
+  const end = endOfDay(d);
+  expect([start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds()]).toEqual([0, 0, 0, 0]);
+  expect([end.getHours(), end.getMinutes(), end.getSeconds(), end.getMilliseconds()]).toEqual([23, 59, 59, 999]);
+  expect(start.getDate()).toBe(d.getDate());
+  expect(end.getDate()).toBe(d.getDate());
+});
+
+test('startOfThisWeek returns the most recent Monday', () => {
+  const wednesday = new Date(2024, 2, 13); // 2024-03-13 is a Wednesday
+  expect(startOfThisWeek(wednesday).getDate()).toBe(11); // Monday 2024-03-11
+
+  const monday = new Date(2024, 2, 11); // itself a Monday
+  expect(startOfThisWeek(monday).getDate()).toBe(11);
+
+  const sunday = new Date(2024, 2, 17); // 2024-03-17 is a Sunday, still in that same week
+  expect(startOfThisWeek(sunday).getDate()).toBe(11);
+});
+
+test('startOfThisMonth/startOfThisYear return the correct calendar boundary', () => {
+  const now = new Date(2024, 2, 15); // 2024-03-15
+  const monthStart = startOfThisMonth(now);
+  expect([monthStart.getFullYear(), monthStart.getMonth(), monthStart.getDate()]).toEqual([2024, 2, 1]);
+
+  const yearStart = startOfThisYear(now);
+  expect([yearStart.getFullYear(), yearStart.getMonth(), yearStart.getDate()]).toEqual([2024, 0, 1]);
+});
+
+test('matchesDateRange is inclusive at both boundaries and unbounded when null', () => {
+  const from = new Date('2024-03-10T00:00:00.000Z');
+  const to = new Date('2024-03-15T23:59:59.999Z');
+  expect(matchesDateRange('2024-03-10T00:00:00.000Z', from, to)).toBe(true);
+  expect(matchesDateRange('2024-03-15T23:59:59.999Z', from, to)).toBe(true);
+  expect(matchesDateRange('2024-03-09T23:59:59.999Z', from, to)).toBe(false);
+  expect(matchesDateRange('2024-03-16T00:00:00.000Z', from, to)).toBe(false);
+  expect(matchesDateRange('1999-01-01T00:00:00.000Z', null, to)).toBe(true);
+  expect(matchesDateRange('2999-01-01T00:00:00.000Z', from, null)).toBe(true);
 });
 
 test('glucose classification — OGTT (diabetes.org 2-hr criteria)', () => {

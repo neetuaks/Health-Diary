@@ -283,3 +283,60 @@ export function ageInMonthsFromDOB(dob?: string | null): number | null {
   if (now.getDate() < birth.getDate()) months--;
   return Math.max(0, months);
 }
+
+// Derives a FieldDefinition.key from a custom parameter type's user-typed field label
+// (e.g. "Waist Circumference" -> "waist_circumference"). Only used for a brand-new field —
+// an existing field being edited keeps its original key regardless of label changes, since
+// the key is what already-saved readings' `vals` JSON is keyed by. Disambiguates against
+// the type's other field keys (case-insensitively) by appending _2, _3, ... so two fields
+// with the same or similar label don't collide.
+export function slugifyFieldKey(label: string, existingKeys: string[]): string {
+  const base = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'field';
+  const taken = new Set(existingKeys.map(k => k.toLowerCase()));
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}_${n}`)) n++;
+  return `${base}_${n}`;
+}
+
+// Date-range helpers for the bulk-delete filter (BulkDeleteScreen). Deliberately separate
+// from rangeStart/RangeKey/filterByRange above — those are open-ended at the top (always
+// "from X through right now"), which is wrong for a delete filter's "To" date: picking a
+// past month must not silently include everything since then. These give an explicit,
+// inclusive upper bound too.
+export function startOfDay(d: Date): Date {
+  const s = new Date(d);
+  s.setHours(0, 0, 0, 0);
+  return s;
+}
+
+export function endOfDay(d: Date): Date {
+  const e = new Date(d);
+  e.setHours(23, 59, 59, 999);
+  return e;
+}
+
+// Monday-start calendar week containing `now`.
+export function startOfThisWeek(now: Date = new Date()): Date {
+  const d = startOfDay(now);
+  const day = d.getDay(); // 0 = Sunday .. 6 = Saturday
+  const diffToMonday = (day + 6) % 7; // Monday -> 0, Sunday -> 6
+  d.setDate(d.getDate() - diffToMonday);
+  return d;
+}
+
+export function startOfThisMonth(now: Date = new Date()): Date {
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+export function startOfThisYear(now: Date = new Date()): Date {
+  return new Date(now.getFullYear(), 0, 1);
+}
+
+// Inclusive on both ends; a null from/to leaves that side unbounded.
+export function matchesDateRange(recordedAtIso: string, from: Date | null, to: Date | null): boolean {
+  const t = new Date(recordedAtIso).getTime();
+  if (from && t < from.getTime()) return false;
+  if (to && t > to.getTime()) return false;
+  return true;
+}

@@ -52,6 +52,41 @@ describe('backup service roundtrip against real db column names', () => {
     const persisted = await __fakeDb.getAllAsync('SELECT * FROM readings;');
     expect(JSON.parse(persisted[0].vals)).toEqual({ systolic: 120, diastolic: 80 });
   });
+
+  test('createEncryptedBackup + restoreEncryptedBackupFromFile round-trips a custom parameter type intact', async () => {
+    __fakeDb._seedProfiles([
+      { id: 'p1', name: 'Alice', date_of_birth: null, glucose_unit_pref: 'mg/dL', weight_unit_pref: 'kg', last_backup_at: null }
+    ]);
+    __fakeDb._seedParameterTypes([
+      {
+        id: 'custom-weight-id',
+        display_name: 'Weight',
+        icon: null,
+        color: null,
+        is_builtin: 0,
+        field_definitions: JSON.stringify([{ key: 'weight_kg', label: 'Weight', dataType: 'numeric', unit: 'kg', required: true }])
+      }
+    ]);
+
+    await createEncryptedBackup();
+    const [, containerJson] = FileSystem.writeAsStringAsync.mock.calls[0];
+
+    const { getStoredRecoveryKey } = require('../src/services/crypto');
+    const recovery = await getStoredRecoveryKey();
+
+    __fakeDb._reset();
+    const restored = await restoreEncryptedBackupFromFile(containerJson, recovery);
+
+    const customType = restored.parameter_types.find((t: any) => t.id === 'custom-weight-id');
+    expect(customType).toBeTruthy();
+    expect(customType.is_builtin).toBe(0);
+    expect(customType.field_definitions).toEqual([{ key: 'weight_kg', label: 'Weight', dataType: 'numeric', unit: 'kg', required: true }]);
+
+    const persistedTypes = await __fakeDb.getAllAsync('SELECT * FROM parameter_types;');
+    const persistedCustom = persistedTypes.find((t: any) => t.id === 'custom-weight-id');
+    expect(persistedCustom).toBeTruthy();
+    expect(JSON.parse(persistedCustom.field_definitions)).toEqual([{ key: 'weight_kg', label: 'Weight', dataType: 'numeric', unit: 'kg', required: true }]);
+  });
 });
 
 describe('readLocalBackupCopy', () => {

@@ -32,6 +32,22 @@ const db = {
       parameterTypes.push({ id, display_name, icon, color, is_builtin, field_definitions });
       return;
     }
+    if (sql.startsWith('INSERT INTO parameter_types')) {
+      const [id, display_name, icon, color, is_builtin, field_definitions] = params;
+      parameterTypes.push({ id, display_name, icon, color, is_builtin, field_definitions });
+      return;
+    }
+    if (sql.startsWith('UPDATE parameter_types SET')) {
+      const [display_name, field_definitions, id] = params;
+      const p = parameterTypes.find((p) => p.id === id && Number(p.is_builtin) === 0);
+      if (p) { p.display_name = display_name; p.field_definitions = field_definitions; }
+      return;
+    }
+    if (sql.startsWith('DELETE FROM parameter_types')) {
+      const [id] = params;
+      parameterTypes = parameterTypes.filter((p) => !(p.id === id && Number(p.is_builtin) === 0));
+      return;
+    }
     if (sql.startsWith('INSERT OR REPLACE INTO profiles')) {
       const [id, name, date_of_birth, glucose_unit_pref, weight_unit_pref, last_backup_at] = params;
       profiles = profiles.filter((p) => p.id !== id);
@@ -52,13 +68,27 @@ const db = {
     }
     throw new Error('Unhandled runAsync SQL in fakeDb: ' + sql);
   },
-  getAllAsync: async (sql) => {
+  getAllAsync: async (sql, params = []) => {
     if (sql.startsWith('SELECT * FROM profiles')) return profiles;
     if (sql.startsWith('SELECT * FROM parameter_types')) return parameterTypes;
+    // Must come before the unconditional 'SELECT * FROM readings' branch below (used
+    // unfiltered by backup.ts) — this scoped form (readingService.ts's
+    // fetchReadingsForProfile) previously matched that same unconditional branch and
+    // silently ignored the WHERE profile_id filter, returning every profile's readings.
+    if (sql.startsWith('SELECT * FROM readings WHERE profile_id')) {
+      const [profile_id] = params;
+      return readings.filter((r) => r.profile_id === profile_id);
+    }
     if (sql.startsWith('SELECT * FROM readings')) return readings;
     throw new Error('Unhandled getAllAsync SQL in fakeDb: ' + sql);
   },
-  getFirstAsync: async () => null,
+  getFirstAsync: async (sql, params = []) => {
+    if (sql.startsWith('SELECT COUNT(*) as count FROM readings WHERE parameter_type_id')) {
+      const [parameter_type_id] = params;
+      return { count: readings.filter((r) => r.parameter_type_id === parameter_type_id).length };
+    }
+    return null;
+  },
   execAsync: async () => {},
   _seedProfiles: (rows) => { profiles = rows; },
   _seedReadings: (rows) => { readings = rows; },

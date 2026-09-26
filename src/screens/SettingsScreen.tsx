@@ -55,6 +55,15 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
       </Card>
 
+      <SectionLabel>Parameters</SectionLabel>
+      <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
+        <ListButton
+          label="Manage Parameter Types"
+          subtitle="Blood Pressure, Glucose, and any custom types you add"
+          onPress={() => navigation.navigate('Parameters')}
+        />
+      </Card>
+
       <SectionLabel>Your Data</SectionLabel>
       <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
         <ListButton label="Export all data (JSON)" onPress={() => confirmUnencryptedExport('JSON', exportAllAsJSON)} style={divider} />
@@ -68,6 +77,13 @@ export default function SettingsScreen({ navigation }: any) {
 
       <SectionLabel>Danger Zone</SectionLabel>
       <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
+        <ListButton
+          label="Delete Multiple Readings"
+          subtitle="By date range, parameter, or profile"
+          destructive
+          onPress={() => navigation.navigate('BulkDelete')}
+          style={divider}
+        />
         <ListButton label="Delete My Data (All)" destructive onPress={() => setDeleteModalOpen(true)} />
       </Card>
       <ConfirmDeleteAllModal visible={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} />
