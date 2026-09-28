@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useProfile } from '../services/profileContext';
 import { fetchReadingsForProfile } from '../services/readingService';
 import { fetchParameterTypes } from '../services/parameterRegistry';
+import { useEntitlement } from '../services/entitlement';
 import ReadingsChart from '../components/ReadingsChart';
-import { filterByRange, RangeKey, ageInMonthsFromDOB } from '../services/utils';
-import { Screen, SegmentedControl, EmptyState } from '../theme/components';
+import { filterByRange, filterByHistoryWindow, RangeKey, ageInMonthsFromDOB } from '../services/utils';
+import { Screen, SegmentedControl, EmptyState, Banner } from '../theme/components';
 import { spacing } from '../theme/tokens';
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
@@ -18,6 +19,8 @@ const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
 
 export default function ChartScreen() {
   const { activeProfile } = useProfile();
+  const { limits } = useEntitlement();
+  const navigation = useNavigation<any>();
   const { height: windowHeight } = useWindowDimensions();
   const [readings, setReadings] = useState<any[]>([]);
   const [types, setTypes] = useState<any[]>([]);
@@ -49,7 +52,9 @@ export default function ChartScreen() {
     }
   }, [types, selectedType]);
 
-  const filtered = selectedType ? filterByRange(readings.filter(r => r.parameter_type_id === selectedType), range) : [];
+  const windowedReadings = filterByHistoryWindow(readings, limits.historyWindowDays);
+  const filtered = selectedType ? filterByRange(windowedReadings.filter(r => r.parameter_type_id === selectedType), range) : [];
+  const hasOlderHiddenReadings = limits.historyWindowDays !== null && readings.length > windowedReadings.length;
   const ageInMonths = ageInMonthsFromDOB(activeProfile?.date_of_birth) ?? undefined;
   const typeDef = types.find((t: any) => t.id === selectedType);
 
@@ -64,6 +69,14 @@ export default function ChartScreen() {
         <EmptyState title="No profile yet" subtitle="Add a profile to get started." />
       ) : (
         <>
+          {hasOlderHiddenReadings && (
+            <Banner
+              variant="info"
+              message="Showing last 7 days. See your full history with Pro."
+              onPress={() => navigation.navigate('Paywall')}
+            />
+          )}
+
           <View style={styles.toggleRow}>
             <SegmentedControl
               options={types.map((t: any) => ({ key: t.id, label: t.display_name }))}

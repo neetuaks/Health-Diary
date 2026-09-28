@@ -4,11 +4,13 @@
 let profiles = [];
 let parameterTypes = [];
 let readings = [];
+let pdfReports = [];
 
 function reset() {
   profiles = [];
   parameterTypes = [];
   readings = [];
+  pdfReports = [];
 }
 
 const db = {
@@ -26,15 +28,39 @@ const db = {
       if (p) p.last_backup_at = last_backup_at;
       return;
     }
+    if (sql.startsWith('UPDATE profiles SET locked_at = NULL')) {
+      const [id] = params;
+      const p = profiles.find((p) => p.id === id);
+      if (p) p.locked_at = null;
+      return;
+    }
+    if (sql.startsWith('UPDATE profiles SET locked_at')) {
+      const [locked_at, id] = params;
+      const p = profiles.find((p) => p.id === id);
+      if (p) p.locked_at = locked_at;
+      return;
+    }
     if (sql.startsWith('INSERT OR REPLACE INTO parameter_types')) {
-      const [id, display_name, icon, color, is_builtin, field_definitions] = params;
+      const [id, display_name, icon, color, is_builtin, field_definitions, locked_at] = params;
       parameterTypes = parameterTypes.filter((p) => p.id !== id);
-      parameterTypes.push({ id, display_name, icon, color, is_builtin, field_definitions });
+      parameterTypes.push({ id, display_name, icon, color, is_builtin, field_definitions, locked_at: locked_at ?? null });
       return;
     }
     if (sql.startsWith('INSERT INTO parameter_types')) {
       const [id, display_name, icon, color, is_builtin, field_definitions] = params;
-      parameterTypes.push({ id, display_name, icon, color, is_builtin, field_definitions });
+      parameterTypes.push({ id, display_name, icon, color, is_builtin, field_definitions, locked_at: null });
+      return;
+    }
+    if (sql.startsWith('UPDATE parameter_types SET locked_at = NULL')) {
+      const [id] = params;
+      const p = parameterTypes.find((p) => p.id === id && Number(p.is_builtin) === 0);
+      if (p) p.locked_at = null;
+      return;
+    }
+    if (sql.startsWith('UPDATE parameter_types SET locked_at')) {
+      const [locked_at, id] = params;
+      const p = parameterTypes.find((p) => p.id === id && Number(p.is_builtin) === 0);
+      if (p) p.locked_at = locked_at;
       return;
     }
     if (sql.startsWith('UPDATE parameter_types SET')) {
@@ -49,9 +75,9 @@ const db = {
       return;
     }
     if (sql.startsWith('INSERT OR REPLACE INTO profiles')) {
-      const [id, name, date_of_birth, glucose_unit_pref, weight_unit_pref, last_backup_at] = params;
+      const [id, name, date_of_birth, glucose_unit_pref, weight_unit_pref, last_backup_at, locked_at] = params;
       profiles = profiles.filter((p) => p.id !== id);
-      profiles.push({ id, name, date_of_birth, glucose_unit_pref, weight_unit_pref, last_backup_at });
+      profiles.push({ id, name, date_of_birth, glucose_unit_pref, weight_unit_pref, last_backup_at, locked_at: locked_at ?? null });
       return;
     }
     if (sql.startsWith('INSERT OR REPLACE INTO readings') || sql.startsWith('INSERT INTO readings')) {
@@ -64,6 +90,16 @@ const db = {
       const [recorded_at, source, vals, notes, id] = params;
       const r = readings.find((r) => r.id === id);
       if (r) { r.recorded_at = recorded_at; r.source = source; r.vals = vals; r.notes = notes; }
+      return;
+    }
+    if (sql.startsWith('INSERT INTO pdf_reports')) {
+      const [id, generated_at, profile_ids, date_range, file_path, type] = params;
+      pdfReports.push({ id, generated_at, profile_ids, date_range, file_path, type });
+      return;
+    }
+    if (sql.startsWith('DELETE FROM pdf_reports')) {
+      const [id] = params;
+      pdfReports = pdfReports.filter((r) => r.id !== id);
       return;
     }
     throw new Error('Unhandled runAsync SQL in fakeDb: ' + sql);
@@ -80,12 +116,19 @@ const db = {
       return readings.filter((r) => r.profile_id === profile_id);
     }
     if (sql.startsWith('SELECT * FROM readings')) return readings;
+    if (sql.startsWith('SELECT * FROM pdf_reports')) {
+      return [...pdfReports].sort((a, b) => (a.generated_at < b.generated_at ? 1 : -1));
+    }
     throw new Error('Unhandled getAllAsync SQL in fakeDb: ' + sql);
   },
   getFirstAsync: async (sql, params = []) => {
     if (sql.startsWith('SELECT COUNT(*) as count FROM readings WHERE parameter_type_id')) {
       const [parameter_type_id] = params;
       return { count: readings.filter((r) => r.parameter_type_id === parameter_type_id).length };
+    }
+    if (sql.startsWith('SELECT * FROM pdf_reports WHERE id')) {
+      const [id] = params;
+      return pdfReports.find((r) => r.id === id) ?? null;
     }
     return null;
   },

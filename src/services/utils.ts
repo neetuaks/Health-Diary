@@ -25,6 +25,16 @@ export function filterByRange(readings: any[], range: RangeKey) {
   return readings.filter(r => new Date(r.recorded_at) >= start);
 }
 
+// The Free tier's in-app visibility / export cap (PAYWALL-SPEC §2-4): readings
+// older than `windowDays` are excluded from what's shown/exported, never
+// deleted — `null` (paid tiers) means no cap at all.
+export function filterByHistoryWindow<T extends { recorded_at: string }>(readings: T[], windowDays: number | null): T[] {
+  if (windowDays === null) return readings;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - windowDays);
+  return readings.filter(r => new Date(r.recorded_at) >= cutoff);
+}
+
 export function mgdlToMmolL(value: number) {
   return +(value / 18.0182).toFixed(2);
 }

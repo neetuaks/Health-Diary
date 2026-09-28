@@ -1,15 +1,27 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useProfile } from '../services/profileContext';
 import { fetchReadingsForProfile } from '../services/readingService';
 import { fetchParameterTypes } from '../services/parameterRegistry';
+import { useEntitlement } from '../services/entitlement';
+import { showUpgradePrompt } from '../services/paywallPrompt';
 import { generateReportPDF } from '../services/pdf';
-import { shareFile } from '../services/share';
+import { persistAndRecordPdf } from '../services/pdfHistory';
+import { downloadPdfToDevice } from '../services/pdfDownload';
 import ReadingsChart from '../components/ReadingsChart';
-import { filterByRange, RangeKey, ageFromDOB, ageInMonthsFromDOB, fieldClassification, clinicalColorKey } from '../services/utils';
-import { Screen, Card, SegmentedControl, EmptyState, ShareIcon } from '../theme/components';
+import { filterByRange, filterByHistoryWindow, RangeKey, ageFromDOB, ageInMonthsFromDOB, fieldClassification, clinicalColorKey } from '../services/utils';
+import { Screen, Card, SegmentedControl, EmptyState, Banner } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
+
+// Material "download" glyph (down arrow into a tray) — PAYWALL-SPEC §6 is explicit
+// this is a download action, not a share one, so it gets a distinct icon from
+// ShareIcon rather than reusing it.
+function DownloadIcon({ size = 18, color = colors.primaryDark }: { size?: number; color?: string }) {
+  return (
+    <Text style={{ fontSize: size, color, lineHeight: size + 2 }}>{'⬇'}</Text>
+  );
+}
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
   { key: 'today', label: 'Today' },
@@ -22,11 +34,13 @@ const COL_WIDTH = 76;
 
 export default function ReportScreen() {
   const { activeProfile } = useProfile();
+  const { limits } = useEntitlement();
+  const navigation = useNavigation<any>();
   const [readings, setReadings] = useState<any[]>([]);
   const [types, setTypes] = useState<any[]>([]);
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>('30');
-  const [sharing, setSharing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   // Drives the scroll-position arrows below — same pattern as Diary: the chart +
   // table can run past one screen, and without a hint there's nothing on screen
   // suggesting there's more below.
@@ -57,22 +71,35 @@ export default function ReportScreen() {
     }
   }, [types, selectedTypeId]);
 
-  // One-tap generate+share, next to the type toggle like Diary's "+" button.
-  const handleShare = async () => {
+  // PAYWALL-SPEC §7: Free never gets a PDF file written at all — the on-screen
+  // chart/table below (already generated from the same windowed readings) IS
+  // its preview. Pro/Premium generate, persist into Report History, and save
+  // to a location the user owns (see pdfDownload.ts) — no in-app "Share" step.
+  const handleDownload = async () => {
+    if (!limits.canGeneratePdf) {
+      showUpgradePrompt(navigation, 'Downloading a PDF report needs Pro or Premium. Free shows a preview of your last 7 days.');
+      return;
+    }
     if (!activeProfile || !selectedTypeId || sortedScoped.length === 0) return;
-    setSharing(true);
+    setDownloading(true);
     try {
-      const filteredByRange = filterByRange(readings, range);
+      const filteredByRange = filterByRange(windowedReadings, range);
       const uri = await generateReportPDF(activeProfile, filteredByRange, [selectedTypeId], range);
-      await shareFile(uri, 'Health Diary Report', 'application/pdf');
+      const dates = sortedScoped.map(r => new Date(r.recorded_at).getTime());
+      const dateRangeLabel = `${new Date(Math.min(...dates)).toLocaleDateString()} – ${new Date(Math.max(...dates)).toLocaleDateString()}`;
+      const record = await persistAndRecordPdf(uri, { profileIds: [activeProfile.id], dateRange: dateRangeLabel, type: 'single' });
+      const result = await downloadPdfToDevice(record.file_path, `healthdiary_report_${activeProfile.name}.pdf`);
+      if (!result.success) Alert.alert('Could not save', result.message ?? 'Please try again.');
     } catch (e: any) {
       Alert.alert('Report failed', e?.message ?? 'Please try again.');
     } finally {
-      setSharing(false);
+      setDownloading(false);
     }
   };
 
-  const filteredByRange = filterByRange(readings, range);
+  const windowedReadings = filterByHistoryWindow(readings, limits.historyWindowDays);
+  const hasOlderHiddenReadings = limits.historyWindowDays !== null && readings.length > windowedReadings.length;
+  const filteredByRange = filterByRange(windowedReadings, range);
   const scoped = selectedTypeId ? filteredByRange.filter(r => r.parameter_type_id === selectedTypeId) : [];
   const sortedScoped = [...scoped].sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
   const age = activeProfile ? ageFromDOB(activeProfile.date_of_birth) : null;
@@ -86,6 +113,14 @@ export default function ReportScreen() {
 
   return (
     <Screen topInset={false}>
+      {hasOlderHiddenReadings && (
+        <Banner
+          variant="info"
+          message="Showing last 7 days. See your full history with Pro."
+          onPress={() => navigation.navigate('Paywall')}
+        />
+      )}
+
       <View style={styles.toggleRow}>
         <View style={{ flex: 1 }}>
           <SegmentedControl
@@ -94,15 +129,30 @@ export default function ReportScreen() {
             onChange={setSelectedTypeId}
           />
         </View>
+        {limits.canGeneratePdf && (
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => navigation.navigate('ReportHistory')}
+            accessibilityLabel="Report history"
+          >
+            <Text style={{ fontSize: 16 }}>{'🕘'}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
-          style={[styles.shareButton, (sharing || sortedScoped.length === 0) && styles.shareButtonDisabled]}
-          onPress={handleShare}
-          disabled={sharing || sortedScoped.length === 0}
-          accessibilityLabel="Generate and share PDF report"
+          style={[styles.shareButton, (downloading || sortedScoped.length === 0) && styles.shareButtonDisabled]}
+          onPress={handleDownload}
+          disabled={downloading || sortedScoped.length === 0}
+          accessibilityLabel="Download PDF report"
         >
-          <ShareIcon size={18} color={colors.primaryDark} />
+          <DownloadIcon size={18} color={colors.primaryDark} />
         </TouchableOpacity>
       </View>
+
+      {!limits.canGeneratePdf && (
+        <Text style={[typography.caption, { marginBottom: spacing.sm }]}>
+          Preview only — this report has a "Preview" watermark and can't be downloaded on Free.
+        </Text>
+      )}
 
       <View style={{ marginBottom: spacing.md }}>
         <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
@@ -118,7 +168,10 @@ export default function ReportScreen() {
           scrollEventThrottle={32}
         >
           <Card>
-            <Text style={typography.bodyBold}>{activeProfile?.name ?? 'No profile'}{age !== null ? ` · ${age} yrs` : ''}</Text>
+            <Text style={typography.bodyBold}>
+              {activeProfile?.name ?? 'No profile'}{age !== null ? ` · ${age} yrs` : ''}
+              {!limits.canGeneratePdf ? '  •  PREVIEW' : ''}
+            </Text>
             <Text style={typography.caption}>{sortedScoped.length} reading{sortedScoped.length === 1 ? '' : 's'} in the selected range</Text>
           </Card>
 

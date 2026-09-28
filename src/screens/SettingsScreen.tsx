@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Alert, TextInput, StyleSheet } from 'react-native';
 import { exportAllAsJSON, exportAllAsCSV } from '../services/dataExport';
 import { emailDiagnostics } from '../services/diagnosticsLog';
+import { useEntitlement } from '../services/entitlement';
+import { TIER_DISPLAY_NAME } from '../services/limits';
 import ConfirmDeleteAllModal from '../components/ConfirmDeleteAllModal';
 import { getBackupReminderDays, setBackupReminderDays } from '../services/appSettings';
 import { Screen, Card, Button, Banner, ListButton } from '../theme/components';
@@ -14,6 +16,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 const divider = { borderBottomWidth: 1, borderBottomColor: colors.border };
 
 export default function SettingsScreen({ navigation }: any) {
+  const { tier, limits } = useEntitlement();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [reminderDays, setReminderDaysState] = useState<number>(30);
 
@@ -37,6 +40,15 @@ export default function SettingsScreen({ navigation }: any) {
       <Text style={typography.h1}>Settings</Text>
 
       <Banner variant="info" title="Your data never leaves your device" message="Health Diary has no backend, no accounts, and no analytics. Readings stay in local storage unless you explicitly export or share them." />
+
+      <SectionLabel>Plan</SectionLabel>
+      <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
+        <ListButton
+          label={`${TIER_DISPLAY_NAME[tier]} plan`}
+          subtitle={tier === 'free' ? 'Upgrade for full history, custom parameters, and PDF reports' : 'Manage your subscription'}
+          onPress={() => navigation.navigate('Paywall')}
+        />
+      </Card>
 
       <SectionLabel>Backup</SectionLabel>
       <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
@@ -66,8 +78,18 @@ export default function SettingsScreen({ navigation }: any) {
 
       <SectionLabel>Your Data</SectionLabel>
       <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
-        <ListButton label="Export all data (JSON)" onPress={() => confirmUnencryptedExport('JSON', exportAllAsJSON)} style={divider} />
-        <ListButton label="Export all data (CSV)" onPress={() => confirmUnencryptedExport('CSV', exportAllAsCSV)} style={divider} />
+        <ListButton
+          label="Export all data (JSON)"
+          subtitle={limits.exportWindowDays !== null ? `Free export covers the last ${limits.exportWindowDays} days. Upgrade for full history.` : undefined}
+          onPress={() => confirmUnencryptedExport('JSON', () => exportAllAsJSON(limits.exportWindowDays))}
+          style={divider}
+        />
+        <ListButton
+          label="Export all data (CSV)"
+          subtitle={limits.exportWindowDays !== null ? `Free export covers the last ${limits.exportWindowDays} days. Upgrade for full history.` : undefined}
+          onPress={() => confirmUnencryptedExport('CSV', () => exportAllAsCSV(limits.exportWindowDays))}
+          style={divider}
+        />
         <ListButton
           label="Report a Problem (Email Diagnostics)"
           subtitle="Technical log only, not your data — opens your email app to send it"

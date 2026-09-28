@@ -109,9 +109,16 @@ export default function NewRecordModal({ visible, onClose, onSaved, editingReadi
     }
   }, [visible, editingReading, initialValues]);
 
+  // Excludes any custom parameter type locked by a tier downgrade (PAYWALL-SPEC
+  // §7) from what can be picked for a NEW reading — it isn't deleted, so an
+  // existing reading of that type is still editable (editingReading's own type
+  // is always kept in, regardless of lock state).
   useEffect(() => {
-    fetchParameterTypes().then(setTypes);
-  }, []);
+    fetchParameterTypes().then(all => {
+      const loggable = all.filter(t => !t.locked_at || t.id === editingReading?.parameter_type_id);
+      setTypes(loggable);
+    });
+  }, [editingReading]);
 
   // Depends on selectedTypeId too (not just types) — the modal-open reset effect above
   // clears selectedTypeId to null on every fresh "Add", and `types` itself only loads

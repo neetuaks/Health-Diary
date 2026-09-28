@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, TextInput, Modal, Alert, Platform, StyleSheet } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useProfile } from '../services/profileContext';
+import { useEntitlement } from '../services/entitlement';
+import { showUpgradePrompt } from '../services/paywallPrompt';
+import { reconcileAndPersistProfileLocks, unlockProfile } from '../services/entitlementLocks';
 import { ageFromDOB } from '../services/utils';
 import { getOnboardingChoice, OnboardingChoice } from '../services/onboarding';
 import FirstRunKeyChoiceModal from '../components/FirstRunKeyChoiceModal';
@@ -20,7 +23,8 @@ type FormState = {
 const emptyForm: FormState = { name: '', date_of_birth: null, glucose_unit_pref: 'mg/dL', weight_unit_pref: 'kg' };
 
 export default function ProfileManager({ navigation }: any) {
-  const { profiles, loading, addProfile, editProfile, deleteProfile, setActiveProfile } = useProfile();
+  const { profiles, loading, activeProfile, addProfile, editProfile, deleteProfile, setActiveProfile, reloadProfiles } = useProfile();
+  const { limits } = useEntitlement();
   const [modalOpen, setModalOpen] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -32,9 +36,42 @@ export default function ProfileManager({ navigation }: any) {
     getOnboardingChoice().then(setOnboardingChoiceState);
   }, []);
 
-  const showFirstRunPrompt = !loading && profiles.length === 0 && onboardingChoice === null;
+  // Reconciles which profiles are locked against the current plan's limit
+  // (PAYWALL-SPEC §7) whenever the profile list or the limit itself changes —
+  // covers both a tier drop (locks the excess, protecting whichever profile is
+  // active) and an upgrade (unlocks up to the new, larger limit). Idempotent:
+  // once locked_at already matches the reconciled result, toLock/toUnlock come
+  // back empty and this stops re-triggering itself.
+  useEffect(() => {
+    if (loading) return;
+    reconcileAndPersistProfileLocks(profiles, limits.maxProfiles, activeProfile?.id).then(({ toLock, toUnlock }) => {
+      if (toLock.length || toUnlock.length) reloadProfiles();
+    });
+  }, [profiles, limits.maxProfiles, activeProfile?.id, loading, reloadProfiles]);
 
-  const openAdd = () => { setForm(emptyForm); setModalOpen(true); };
+  const showFirstRunPrompt = !loading && profiles.length === 0 && onboardingChoice === null;
+  const activeProfileCount = profiles.filter(p => !p.locked_at).length;
+
+  const openAdd = () => {
+    if (activeProfileCount >= limits.maxProfiles) {
+      showUpgradePrompt(navigation, `Your plan covers ${limits.maxProfiles} profile${limits.maxProfiles === 1 ? '' : 's'}. Upgrade to add another.`);
+      return;
+    }
+    setForm(emptyForm);
+    setModalOpen(true);
+  };
+
+  // Swaps which profile counts against the plan's limit: unlocks `id`, then
+  // re-reconciles protecting it, which locks whichever profile that displaces
+  // if the count is still over budget. This is the "let the user choose which
+  // stay active" mechanism from PAYWALL-SPEC §7 — an ongoing choice, not a
+  // one-time forced picker.
+  const promoteProfile = async (id: string) => {
+    await unlockProfile(id);
+    const updated = profiles.map(p => (p.id === id ? { ...p, locked_at: null } : p));
+    await reconcileAndPersistProfileLocks(updated, limits.maxProfiles, id);
+    await reloadProfiles();
+  };
 
   const openEdit = (p: Profile) => {
     setForm({
@@ -85,17 +122,30 @@ export default function ProfileManager({ navigation }: any) {
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         renderItem={({ item }) => {
           const age = ageFromDOB(item.date_of_birth);
+          const isLocked = !!item.locked_at;
           return (
-            <Card style={styles.row}>
-              <TouchableOpacity style={{ flex: 1 }} onPress={() => { setActiveProfile(item.id); navigation.goBack(); }}>
-                <Text style={typography.bodyBold}>{item.name}</Text>
+            <Card style={[styles.row, isLocked && styles.rowLocked]}>
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                disabled={isLocked}
+                onPress={() => { setActiveProfile(item.id); navigation.goBack(); }}
+              >
+                <Text style={typography.bodyBold}>{item.name}{isLocked ? '  🔒 Locked' : ''}</Text>
                 <Text style={typography.caption}>
-                  {age !== null ? `${age} years old` : 'DOB not set'} · {item.glucose_unit_pref ?? 'mg/dL'} · {item.weight_unit_pref ?? 'kg'}
+                  {isLocked
+                    ? 'Over your plan\'s profile limit — readings are kept, just hidden until reactivated.'
+                    : `${age !== null ? `${age} years old` : 'DOB not set'} · ${item.glucose_unit_pref ?? 'mg/dL'} · ${item.weight_unit_pref ?? 'kg'}`}
                 </Text>
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                <Button label="Edit" size="sm" variant="secondary" onPress={() => openEdit(item)} />
-                <Button label="Delete" size="sm" variant="destructive" onPress={() => remove(item)} />
+                {isLocked ? (
+                  <Button label="Make Active" size="sm" variant="secondary" onPress={() => promoteProfile(item.id)} />
+                ) : (
+                  <>
+                    <Button label="Edit" size="sm" variant="secondary" onPress={() => openEdit(item)} />
+                    <Button label="Delete" size="sm" variant="destructive" onPress={() => remove(item)} />
+                  </>
+                )}
               </View>
             </Card>
           );
@@ -162,6 +212,7 @@ export default function ProfileManager({ navigation }: any) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowLocked: { opacity: 0.6 },
   label: { marginTop: spacing.lg, marginBottom: spacing.xs },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.surface },
   segmented: { flexDirection: 'row', gap: spacing.sm },

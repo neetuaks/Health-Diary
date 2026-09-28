@@ -3,6 +3,12 @@ import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import ParameterTypesScreen from '../../src/screens/ParameterTypesScreen';
 
+// ParameterTypesScreen now reads useNavigation() directly (to deep-link the
+// paywall gate) rather than taking a navigation prop — this component is
+// rendered bare here (no NavigationContainer ancestor), so the real hook
+// would throw "Couldn't find a navigation object" without this mock.
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: jest.fn() }) }));
+
 const BP_TYPE = {
   id: 'bp',
   display_name: 'Blood Pressure',
@@ -43,6 +49,18 @@ jest.mock('../../src/services/parameterRegistry', () => ({
   countReadingsForParameterType: jest.fn()
 }));
 
+// Premium's limits by default (effectively unlimited for this file's purposes)
+// so every pre-existing CRUD-flow test below keeps exercising the Add/Edit/
+// Delete flow itself, undisturbed by the paywall gate — PAYWALL-SPEC §4.2's
+// gate has its own dedicated describe block further down, which overrides
+// this per test.
+jest.mock('../../src/services/entitlement', () => ({
+  useEntitlement: jest.fn(() => ({ limits: { maxCustomParams: 8 } })),
+}));
+jest.mock('../../src/services/entitlementLocks', () => ({
+  reconcileAndPersistParameterTypeLocks: jest.fn(async () => ({ toLock: [], toUnlock: [] })),
+}));
+
 const {
   fetchParameterTypes,
   insertParameterType,
@@ -50,6 +68,7 @@ const {
   deleteParameterType,
   countReadingsForParameterType
 } = require('../../src/services/parameterRegistry');
+const { useEntitlement } = require('../../src/services/entitlement');
 
 describe('ParameterTypesScreen', () => {
   beforeEach(() => {
@@ -58,6 +77,7 @@ describe('ParameterTypesScreen', () => {
     // render()/`screen` on every test after the first in this file.
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    useEntitlement.mockReturnValue({ limits: { maxCustomParams: 8 } });
   });
 
   test('renders built-in types with a Built-in tag and no Edit/Delete buttons', async () => {
@@ -201,5 +221,50 @@ describe('ParameterTypesScreen', () => {
       expect(Alert.alert).toHaveBeenCalledWith("Can't delete", '3 readings use "Weight". Delete them first, then try again.')
     );
     expect(deleteParameterType).not.toHaveBeenCalled();
+  });
+});
+
+describe('ParameterTypesScreen custom-param limit gate (PAYWALL-SPEC §4.2)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+
+  test('at the limit: "Add Parameter Type" shows an upgrade prompt instead of opening the form', async () => {
+    useEntitlement.mockReturnValue({ limits: { maxCustomParams: 1 } });
+    fetchParameterTypes.mockResolvedValue([BP_TYPE, CUSTOM_TYPE]);
+    await render(<ParameterTypesScreen />);
+    await screen.findByText('Weight');
+
+    await fireEvent.press(screen.getByText('Add Parameter Type'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith(
+      'Upgrade to unlock this',
+      "Your plan covers 1 custom parameter type. Upgrade to add another.",
+      expect.any(Array)
+    ));
+    expect(screen.queryByPlaceholderText('e.g. Weight')).toBeNull();
+  });
+
+  test('under the limit: "Add Parameter Type" opens the form as normal', async () => {
+    useEntitlement.mockReturnValue({ limits: { maxCustomParams: 4 } });
+    fetchParameterTypes.mockResolvedValue([BP_TYPE, CUSTOM_TYPE]);
+    await render(<ParameterTypesScreen />);
+    await screen.findByText('Weight');
+
+    await fireEvent.press(screen.getByText('Add Parameter Type'));
+
+    expect(await screen.findByPlaceholderText('e.g. Weight')).toBeTruthy();
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  test('a locked custom type shows a Locked badge instead of Edit/Delete', async () => {
+    useEntitlement.mockReturnValue({ limits: { maxCustomParams: 1 } });
+    fetchParameterTypes.mockResolvedValue([BP_TYPE, { ...CUSTOM_TYPE, locked_at: '2024-01-01T00:00:00.000Z' }]);
+    await render(<ParameterTypesScreen />);
+
+    expect(await screen.findByText(/Weight.*Locked/)).toBeTruthy();
+    expect(screen.queryByText('Edit')).toBeNull();
+    expect(screen.queryByText('Delete')).toBeNull();
   });
 });

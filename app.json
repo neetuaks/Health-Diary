@@ -20,6 +20,10 @@
     "extra": {
       "eas": {
         "projectId": "31eb8548-e8ad-4364-a6ab-634c59f47eaf"
+      },
+      "revenueCatApiKey": {
+        "ios": "",
+        "android": ""
       }
     },
     "owner": "nitu_sn"

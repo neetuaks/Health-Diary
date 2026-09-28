@@ -127,12 +127,12 @@ export async function restoreEncryptedBackupFromFile(containerJson: string, reco
   }
   for (const pt of (obj.parameter_types || [])) {
     try {
-      await db.runAsync('INSERT OR REPLACE INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions) VALUES (?,?,?,?,?,?);', [pt.id, pt.display_name, pt.icon, pt.color, pt.is_builtin ?? 0, JSON.stringify(pt.field_definitions)]);
+      await db.runAsync('INSERT OR REPLACE INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions, locked_at) VALUES (?,?,?,?,?,?,?);', [pt.id, pt.display_name, pt.icon, pt.color, pt.is_builtin ?? 0, JSON.stringify(pt.field_definitions), pt.locked_at ?? null]);
     } catch (e) { /* ignore */ }
   }
   for (const p of (obj.profiles || [])) {
     try {
-      await db.runAsync('INSERT OR REPLACE INTO profiles (id, name, date_of_birth, glucose_unit_pref, weight_unit_pref, last_backup_at) VALUES (?,?,?,?,?,?);', [p.id, p.name, p.date_of_birth || null, p.glucose_unit_pref || 'mg/dL', p.weight_unit_pref || 'kg', p.last_backup_at || null]);
+      await db.runAsync('INSERT OR REPLACE INTO profiles (id, name, date_of_birth, glucose_unit_pref, weight_unit_pref, last_backup_at, locked_at) VALUES (?,?,?,?,?,?,?);', [p.id, p.name, p.date_of_birth || null, p.glucose_unit_pref || 'mg/dL', p.weight_unit_pref || 'kg', p.last_backup_at || null, p.locked_at ?? null]);
     } catch (e) { }
   }
   for (const r of (obj.readings || [])) {

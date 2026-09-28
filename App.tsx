@@ -11,6 +11,7 @@ import ReportScreen from './src/screens/ReportScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import BackupScreen from './src/screens/BackupScreen';
 import ProfileContextProvider, { useProfile } from './src/services/profileContext';
+import EntitlementProvider from './src/services/entitlement';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { Button } from './src/theme/components';
 import { colors, spacing, typography } from './src/theme/tokens';
@@ -92,16 +93,20 @@ export default function App() {
       <ErrorBoundary>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <ProfileContextProvider>
-            <NavigationContainer>
-              <Stack.Navigator screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="MainTabs" component={MainTabs} />
-                <Stack.Screen name="Settings" component={SettingsScreen} />
-                <Stack.Screen name="Backup" component={BackupScreen} />
-                <Stack.Screen name="Profiles" component={require('./src/screens/ProfileManager').default} />
-                <Stack.Screen name="Parameters" component={require('./src/screens/ParameterTypesScreen').default} />
-                <Stack.Screen name="BulkDelete" component={require('./src/screens/BulkDeleteScreen').default} />
-              </Stack.Navigator>
-            </NavigationContainer>
+            <EntitlementProvider>
+              <NavigationContainer>
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="MainTabs" component={MainTabs} />
+                  <Stack.Screen name="Settings" component={SettingsScreen} />
+                  <Stack.Screen name="Backup" component={BackupScreen} />
+                  <Stack.Screen name="Profiles" component={require('./src/screens/ProfileManager').default} />
+                  <Stack.Screen name="Parameters" component={require('./src/screens/ParameterTypesScreen').default} />
+                  <Stack.Screen name="BulkDelete" component={require('./src/screens/BulkDeleteScreen').default} />
+                  <Stack.Screen name="Paywall" component={require('./src/screens/PaywallScreen').default} />
+                  <Stack.Screen name="ReportHistory" component={require('./src/screens/ReportHistoryScreen').default} />
+                </Stack.Navigator>
+              </NavigationContainer>
+            </EntitlementProvider>
           </ProfileContextProvider>
         </GestureHandlerRootView>
       </ErrorBoundary>
