@@ -48,12 +48,13 @@ flowchart LR
 |---|---|
 | `index.js` | Runtime polyfills and Expo root registration |
 | `App.tsx` | Gesture-handler root, profile provider, navigation shell, profile switcher |
-| `src/db/init.ts` | Opens SQLite, creates tables, seeds built-in parameter types |
+| `src/db/init.ts` | Opens SQLite, creates tables, seeds built-in parameter types, runs the one-time profile-parameter-scoping backfill |
 | `src/db/seed.ts` | Seeds Blood Pressure and Glucose parameter definitions |
 | `src/types/index.ts` | TypeScript contracts for profiles, readings, parameters |
 | `src/services/profileContext.tsx` | Profile state and profile CRUD |
 | `src/services/readingService.ts` | Reading CRUD and JSON value decoding |
 | `src/services/parameterRegistry.ts` | Parameter type reads and field-definition decoding |
+| `src/services/profileParameterTypes.ts` | Per-profile custom parameter type scoping (`profile_parameter_types` join table) and its legacy-data backfill |
 | `src/services/backup.ts` | Encrypted local backup creation, preview, and restore |
 | `src/services/backupDestinations.ts` | Writes the always-on local safety copy (no cloud destinations) |
 | `src/services/onboarding.ts` | Persists the first-run "new vs. existing user" choice |

@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { seedParameterTypes } from './seed';
+import { backfillLegacyCustomParameterTypeScoping } from '../services/profileParameterTypes';
 
 const db = SQLite.openDatabaseSync('healthdiary.db');
 
@@ -34,9 +35,17 @@ export async function initDB() {
       notes TEXT
     );`);
 
-    
+    // A row means "this custom parameter type is enabled for this profile". Built-in
+    // types never get rows here and are always included regardless — see
+    // src/services/profileParameterTypes.ts.
+    db.execSync(`CREATE TABLE IF NOT EXISTS profile_parameter_types (
+      profile_id TEXT NOT NULL,
+      parameter_type_id TEXT NOT NULL,
+      PRIMARY KEY (profile_id, parameter_type_id)
+    );`);
 
     seedParameterTypes(db);
+    await backfillLegacyCustomParameterTypeScoping();
   } catch (err) {
     console.error('DB init error', err);
   }

@@ -10,7 +10,7 @@ import {
   computeChartXDomain,
   RangeKey,
 } from './utils';
-import { fetchParameterTypes } from './parameterRegistry';
+import { fetchParameterTypesForProfile } from './profileParameterTypes';
 import { colors, chartSeriesColors } from '../theme/tokens';
 
 const CHART_SERIES_COLORS: readonly string[] = chartSeriesColors;
@@ -173,7 +173,7 @@ function renderChartSVG(typeDef: any, items: any[], range: RangeKey, ageInMonths
 // (the OS share sheet, a flaky file provider) doesn't also wipe out a PDF that was
 // actually generated successfully.
 export async function generateReportPDF(profile: any, readings: any[], parameterFilter: string[] = [], range: RangeKey = '30'): Promise<string> {
-  const types = await fetchParameterTypes();
+  const types = await fetchParameterTypesForProfile(profile?.id ?? null);
 
   const grouped: Record<string, any[]> = {};
   readings.forEach(r => {

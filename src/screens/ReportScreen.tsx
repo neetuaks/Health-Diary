@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity } from 'rea
 import { useFocusEffect } from '@react-navigation/native';
 import { useProfile } from '../services/profileContext';
 import { fetchReadingsForProfile } from '../services/readingService';
-import { fetchParameterTypes } from '../services/parameterRegistry';
+import { fetchParameterTypesForProfile } from '../services/profileParameterTypes';
 import { generateReportPDF } from '../services/pdf';
 import { shareFile } from '../services/share';
 import ReadingsChart from '../components/ReadingsChart';
@@ -35,17 +35,22 @@ export default function ReportScreen() {
   const [scrollY, setScrollY] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
-  useEffect(() => { fetchParameterTypes().then(setTypes); }, []);
-
   // Refetches on every focus, not just once on mount — see ChartScreen for why a
   // plain useEffect(..., [activeProfile]) goes stale on a bottom-tab navigator.
+  // Parameter types are fetched here too, not in a separate mount-only effect —
+  // they're profile-scoped now, so a profile switch or a parameter change made
+  // elsewhere (Profiles > Parameters) needs to be picked up on focus as well.
   useFocusEffect(
     useCallback(() => {
       // Clear rather than just skip the fetch when there's no active profile
       // (e.g. right after "Delete All Data") — otherwise whatever was last
       // fetched for a now-gone profile just keeps rendering. See ChartScreen.
-      if (!activeProfile) { setReadings([]); return; }
+      if (!activeProfile) { setReadings([]); setTypes([]); setSelectedTypeId(null); return; }
       fetchReadingsForProfile(activeProfile.id).then(setReadings);
+      fetchParameterTypesForProfile(activeProfile.id).then(ts => {
+        setTypes(ts);
+        setSelectedTypeId(prev => (prev && ts.some((t: any) => t.id === prev) ? prev : null));
+      });
     }, [activeProfile])
   );
 

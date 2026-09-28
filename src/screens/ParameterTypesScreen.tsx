@@ -8,6 +8,8 @@ import {
   deleteParameterType,
   countReadingsForParameterType
 } from '../services/parameterRegistry';
+import { assignParameterTypeToProfiles } from '../services/profileParameterTypes';
+import { useProfile } from '../services/profileContext';
 import { slugifyFieldKey } from '../services/utils';
 import { Screen, Card, Button, EmptyState } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
@@ -30,10 +32,17 @@ type FieldRowState = {
   optionsText: string;
 };
 
+type ProfileScope = 'all' | 'selected';
+
 type FormState = {
   id?: string;
   display_name: string;
   fields: FieldRowState[];
+  // Only meaningful when creating (form.id is undefined) — editing an existing type
+  // never touches which profiles it's assigned to; that's managed later from each
+  // profile's own "Manage Parameters" screen.
+  profileScope: ProfileScope;
+  selectedProfileIds: string[];
 };
 
 function parseOptions(text: string): string[] {
@@ -49,9 +58,10 @@ function parseOptions(text: string): string[] {
 }
 
 export default function ParameterTypesScreen() {
+  const { profiles } = useProfile();
   const [types, setTypes] = useState<ParameterType[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState<FormState>({ display_name: '', fields: [] });
+  const [form, setForm] = useState<FormState>({ display_name: '', fields: [], profileScope: 'all', selectedProfileIds: [] });
   const newFieldCounter = useRef(0);
 
   const refresh = () => fetchParameterTypes().then(setTypes);
@@ -73,7 +83,7 @@ export default function ParameterTypesScreen() {
   });
 
   const openAdd = () => {
-    setForm({ display_name: '', fields: [newFieldRow()] });
+    setForm({ display_name: '', fields: [newFieldRow()], profileScope: 'all', selectedProfileIds: [] });
     setModalOpen(true);
   };
 
@@ -91,9 +101,20 @@ export default function ParameterTypesScreen() {
         max: f.max !== undefined && f.max !== null ? String(f.max) : '',
         required: !!f.required,
         optionsText: (f.options ?? []).join(', ')
-      }))
+      })),
+      profileScope: 'all',
+      selectedProfileIds: []
     });
     setModalOpen(true);
+  };
+
+  const toggleSelectedProfile = (profileId: string) => {
+    setForm(f => ({
+      ...f,
+      selectedProfileIds: f.selectedProfileIds.includes(profileId)
+        ? f.selectedProfileIds.filter(id => id !== profileId)
+        : [...f.selectedProfileIds, profileId]
+    }));
   };
 
   const updateFieldRow = (idx: number, patch: Partial<FieldRowState>) => {
@@ -132,6 +153,11 @@ export default function ParameterTypesScreen() {
         return;
       }
     }
+    // Profile scope is only chosen at creation time (see FormState's comment).
+    if (!form.id && form.profileScope === 'selected' && profiles.length > 0 && form.selectedProfileIds.length === 0) {
+      Alert.alert('Select at least one profile', 'Choose which profiles get this parameter type, or switch to "All Profiles".');
+      return;
+    }
 
     const usedKeys: string[] = [];
     const field_definitions: FieldDefinition[] = form.fields.map(f => {
@@ -153,7 +179,11 @@ export default function ParameterTypesScreen() {
       if (form.id) {
         await updateParameterType({ id: form.id, display_name: name, is_builtin: 0, field_definitions });
       } else {
-        await insertParameterType({ display_name: name, field_definitions });
+        const created = await insertParameterType({ display_name: name, field_definitions });
+        if (profiles.length > 0) {
+          const targetProfileIds = form.profileScope === 'all' ? profiles.map(p => p.id) : form.selectedProfileIds;
+          await assignParameterTypeToProfiles(created.id, targetProfileIds);
+        }
       }
     } catch (e: any) {
       Alert.alert('Could not save', e?.message ?? 'Please try again.');
@@ -303,6 +333,40 @@ export default function ParameterTypesScreen() {
           ))}
 
           <Button label="+ Add Field" variant="secondary" onPress={addField} style={{ marginTop: spacing.sm }} />
+
+          {!form.id && profiles.length > 0 && (
+            <>
+              <Text style={[typography.bodyBold, styles.label]}>Available to</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                {(['all', 'selected'] as ProfileScope[]).map(scope => (
+                  <TouchableOpacity
+                    key={scope}
+                    onPress={() => setForm(f => ({ ...f, profileScope: scope }))}
+                    style={[styles.chip, form.profileScope === scope && styles.chipActive]}
+                  >
+                    <Text style={{ color: form.profileScope === scope ? colors.primaryDark : colors.primary }}>
+                      {scope === 'all' ? 'All Profiles' : 'Selected Profiles'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {form.profileScope === 'selected' && (
+                <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' }}>
+                  {profiles.map(p => (
+                    <TouchableOpacity
+                      key={p.id}
+                      onPress={() => toggleSelectedProfile(p.id)}
+                      style={[styles.chip, form.selectedProfileIds.includes(p.id) && styles.chipActive]}
+                    >
+                      <Text style={{ color: form.selectedProfileIds.includes(p.id) ? colors.primaryDark : colors.primary }}>
+                        {p.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
 
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xl }}>
             <Button label="Cancel" variant="secondary" onPress={() => setModalOpen(false)} />

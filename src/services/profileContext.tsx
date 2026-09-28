@@ -83,6 +83,7 @@ export default function ProfileContextProvider({ children }: { children: React.R
   const deleteProfile = async (id: string) => {
     const db = getDB();
     await db.runAsync('DELETE FROM readings WHERE profile_id = ?;', [id]);
+    await db.runAsync('DELETE FROM profile_parameter_types WHERE profile_id = ?;', [id]);
     await db.runAsync('DELETE FROM profiles WHERE id = ?;', [id]);
     setProfiles(prev => prev.filter(p => p.id !== id));
     if (activeProfileId === id) setActiveProfileId(null);

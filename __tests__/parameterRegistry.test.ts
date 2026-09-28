@@ -83,6 +83,19 @@ describe('parameterRegistry CRUD for custom parameter types', () => {
     expect(all.map(t => t.id)).not.toContain(created.id);
   });
 
+  test('deleteParameterType also drops its profile-scoping rows', async () => {
+    const created = await insertParameterType({
+      display_name: 'Weight',
+      field_definitions: [{ key: 'weight_kg', label: 'Weight', dataType: 'numeric', required: true }]
+    });
+    __fakeDb._seedProfileParameterTypes([{ profile_id: 'profile-a', parameter_type_id: created.id }]);
+
+    await deleteParameterType(created.id);
+
+    const rows = await __fakeDb.getAllAsync('SELECT * FROM profile_parameter_types;');
+    expect(rows).toEqual([]);
+  });
+
   test('deleteParameterType leaves a built-in type in place', async () => {
     await deleteParameterType('bp');
     const all = await fetchParameterTypes();

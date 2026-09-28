@@ -4,11 +4,13 @@
 let profiles = [];
 let parameterTypes = [];
 let readings = [];
+let profileParameterTypes = [];
 
 function reset() {
   profiles = [];
   parameterTypes = [];
   readings = [];
+  profileParameterTypes = [];
 }
 
 const db = {
@@ -19,11 +21,51 @@ const db = {
       return;
     }
     if (sql.startsWith('DELETE FROM readings')) { readings = []; return; }
+    if (sql.startsWith('DELETE FROM profile_parameter_types WHERE profile_id = ? AND parameter_type_id = ?')) {
+      const [profile_id, parameter_type_id] = params;
+      profileParameterTypes = profileParameterTypes.filter((r) => !(r.profile_id === profile_id && r.parameter_type_id === parameter_type_id));
+      return;
+    }
+    if (sql.startsWith('DELETE FROM profile_parameter_types WHERE parameter_type_id')) {
+      const [parameter_type_id] = params;
+      profileParameterTypes = profileParameterTypes.filter((r) => r.parameter_type_id !== parameter_type_id);
+      return;
+    }
+    if (sql.startsWith('DELETE FROM profile_parameter_types WHERE profile_id')) {
+      const [profile_id] = params;
+      profileParameterTypes = profileParameterTypes.filter((r) => r.profile_id !== profile_id);
+      return;
+    }
+    if (sql.startsWith('DELETE FROM profile_parameter_types')) { profileParameterTypes = []; return; }
     if (sql.startsWith('DELETE FROM profiles')) { profiles = []; return; }
     if (sql.startsWith('UPDATE profiles SET last_backup_at')) {
       const [last_backup_at, id] = params;
       const p = profiles.find((p) => p.id === id);
       if (p) p.last_backup_at = last_backup_at;
+      return;
+    }
+    if (sql.startsWith('INSERT OR IGNORE INTO profile_parameter_types') && sql.includes('SELECT p.id, pt.id')) {
+      // Backfill migration: every profile x every non-builtin parameter type.
+      for (const p of profiles) {
+        for (const pt of parameterTypes) {
+          if (Number(pt.is_builtin) === 0 && !profileParameterTypes.some((r) => r.profile_id === p.id && r.parameter_type_id === pt.id)) {
+            profileParameterTypes.push({ profile_id: p.id, parameter_type_id: pt.id });
+          }
+        }
+      }
+      return;
+    }
+    if (sql.startsWith('INSERT OR IGNORE INTO profile_parameter_types')) {
+      const [profile_id, parameter_type_id] = params;
+      if (!profileParameterTypes.some((r) => r.profile_id === profile_id && r.parameter_type_id === parameter_type_id)) {
+        profileParameterTypes.push({ profile_id, parameter_type_id });
+      }
+      return;
+    }
+    if (sql.startsWith('INSERT OR REPLACE INTO profile_parameter_types')) {
+      const [profile_id, parameter_type_id] = params;
+      profileParameterTypes = profileParameterTypes.filter((r) => !(r.profile_id === profile_id && r.parameter_type_id === parameter_type_id));
+      profileParameterTypes.push({ profile_id, parameter_type_id });
       return;
     }
     if (sql.startsWith('INSERT OR REPLACE INTO parameter_types')) {
@@ -70,6 +112,22 @@ const db = {
   },
   getAllAsync: async (sql, params = []) => {
     if (sql.startsWith('SELECT * FROM profiles')) return profiles;
+    if (sql.startsWith('SELECT parameter_type_id FROM profile_parameter_types WHERE profile_id')) {
+      const [profile_id] = params;
+      return profileParameterTypes.filter((r) => r.profile_id === profile_id).map((r) => ({ parameter_type_id: r.parameter_type_id }));
+    }
+    if (sql.startsWith('SELECT * FROM profile_parameter_types')) return profileParameterTypes;
+    // fetchParameterTypesForProfile(profileId) with a non-null profileId: built-ins plus
+    // whichever custom types this profile has a profile_parameter_types row for.
+    if (sql.startsWith('SELECT pt.* FROM parameter_types pt')) {
+      const [profile_id] = params;
+      const allowed = new Set(profileParameterTypes.filter((r) => r.profile_id === profile_id).map((r) => r.parameter_type_id));
+      return parameterTypes.filter((pt) => Number(pt.is_builtin) === 1 || allowed.has(pt.id));
+    }
+    // fetchParameterTypesForProfile(null): built-ins only.
+    if (sql.startsWith('SELECT * FROM parameter_types WHERE is_builtin = 1')) {
+      return parameterTypes.filter((pt) => Number(pt.is_builtin) === 1);
+    }
     if (sql.startsWith('SELECT * FROM parameter_types')) return parameterTypes;
     // Must come before the unconditional 'SELECT * FROM readings' branch below (used
     // unfiltered by backup.ts) — this scoped form (readingService.ts's
@@ -93,6 +151,7 @@ const db = {
   _seedProfiles: (rows) => { profiles = rows; },
   _seedReadings: (rows) => { readings = rows; },
   _seedParameterTypes: (rows) => { parameterTypes = rows; },
+  _seedProfileParameterTypes: (rows) => { profileParameterTypes = rows; },
   _reset: reset
 };
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { fetchParameterTypes } from '../services/parameterRegistry';
+import { fetchParameterTypesForProfile } from '../services/profileParameterTypes';
 import { insertReading, updateReading } from '../services/readingService';
 import { useProfile } from '../services/profileContext';
 import { classifyBP, clinicalColorKey, clinicalLabel, mgdlToMmolL, mmolLToMgdl } from '../services/utils';
@@ -110,8 +110,13 @@ export default function NewRecordModal({ visible, onClose, onSaved, editingReadi
   }, [visible, editingReading, initialValues]);
 
   useEffect(() => {
-    fetchParameterTypes().then(setTypes);
-  }, []);
+    fetchParameterTypesForProfile(activeProfile?.id ?? null).then(setTypes);
+    // Depend on the id, not the activeProfile object itself — profileContext
+    // recomputes a fresh object on every provider render, so an object dependency
+    // here would refetch (and re-render) on every render, not just a real profile
+    // switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id]);
 
   // Depends on selectedTypeId too (not just types) — the modal-open reset effect above
   // clears selectedTypeId to null on every fresh "Add", and `types` itself only loads

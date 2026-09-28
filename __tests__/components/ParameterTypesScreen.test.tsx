@@ -43,6 +43,14 @@ jest.mock('../../src/services/parameterRegistry', () => ({
   countReadingsForParameterType: jest.fn()
 }));
 
+jest.mock('../../src/services/profileContext', () => ({
+  useProfile: jest.fn()
+}));
+
+jest.mock('../../src/services/profileParameterTypes', () => ({
+  assignParameterTypeToProfiles: jest.fn()
+}));
+
 const {
   fetchParameterTypes,
   insertParameterType,
@@ -50,6 +58,8 @@ const {
   deleteParameterType,
   countReadingsForParameterType
 } = require('../../src/services/parameterRegistry');
+const { useProfile } = require('../../src/services/profileContext');
+const { assignParameterTypeToProfiles } = require('../../src/services/profileParameterTypes');
 
 describe('ParameterTypesScreen', () => {
   beforeEach(() => {
@@ -58,6 +68,10 @@ describe('ParameterTypesScreen', () => {
     // render()/`screen` on every test after the first in this file.
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    // No profiles by default — matches every pre-existing test in this file, which
+    // predates per-profile scoping and asserts nothing about the "Available to"
+    // section. It only renders once there's at least one profile (see below).
+    useProfile.mockReturnValue({ profiles: [] });
   });
 
   test('renders built-in types with a Built-in tag and no Edit/Delete buttons', async () => {
@@ -201,5 +215,74 @@ describe('ParameterTypesScreen', () => {
       expect(Alert.alert).toHaveBeenCalledWith("Can't delete", '3 readings use "Weight". Delete them first, then try again.')
     );
     expect(deleteParameterType).not.toHaveBeenCalled();
+  });
+
+  describe('profile scope on creation', () => {
+    beforeEach(() => {
+      useProfile.mockReturnValue({ profiles: [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }] });
+    });
+
+    test('defaults to "All Profiles" and assigns the new type to every profile', async () => {
+      fetchParameterTypes.mockResolvedValueOnce([BP_TYPE]).mockResolvedValueOnce([BP_TYPE, CUSTOM_TYPE]);
+      insertParameterType.mockResolvedValue(CUSTOM_TYPE);
+      await render(<ParameterTypesScreen />);
+      await screen.findByText('Blood Pressure');
+
+      await fireEvent.press(screen.getByText('Add Parameter Type'));
+      await fireEvent.changeText(screen.getByPlaceholderText('e.g. Weight'), 'Weight');
+      await fireEvent.changeText(screen.getByPlaceholderText('Label (e.g. Weight)'), 'Weight');
+      expect(screen.getByText('All Profiles')).toBeTruthy();
+      // "Selected Profiles" not chosen — no per-profile chips should render.
+      expect(screen.queryByText('Alice')).toBeNull();
+
+      await fireEvent.press(screen.getByText('Save'));
+
+      await waitFor(() => expect(assignParameterTypeToProfiles).toHaveBeenCalledWith(CUSTOM_TYPE.id, ['p1', 'p2']));
+    });
+
+    test('"Selected Profiles" assigns only the chosen profiles', async () => {
+      fetchParameterTypes.mockResolvedValueOnce([BP_TYPE]).mockResolvedValueOnce([BP_TYPE, CUSTOM_TYPE]);
+      insertParameterType.mockResolvedValue(CUSTOM_TYPE);
+      await render(<ParameterTypesScreen />);
+      await screen.findByText('Blood Pressure');
+
+      await fireEvent.press(screen.getByText('Add Parameter Type'));
+      await fireEvent.changeText(screen.getByPlaceholderText('e.g. Weight'), 'Weight');
+      await fireEvent.changeText(screen.getByPlaceholderText('Label (e.g. Weight)'), 'Weight');
+      await fireEvent.press(screen.getByText('Selected Profiles'));
+      await fireEvent.press(screen.getByText('Alice'));
+      await fireEvent.press(screen.getByText('Save'));
+
+      await waitFor(() => expect(assignParameterTypeToProfiles).toHaveBeenCalledWith(CUSTOM_TYPE.id, ['p1']));
+    });
+
+    test('rejects save when "Selected Profiles" has none chosen', async () => {
+      fetchParameterTypes.mockResolvedValue([BP_TYPE]);
+      await render(<ParameterTypesScreen />);
+      await screen.findByText('Blood Pressure');
+
+      await fireEvent.press(screen.getByText('Add Parameter Type'));
+      await fireEvent.changeText(screen.getByPlaceholderText('e.g. Weight'), 'Weight');
+      await fireEvent.changeText(screen.getByPlaceholderText('Label (e.g. Weight)'), 'Weight');
+      await fireEvent.press(screen.getByText('Selected Profiles'));
+      await fireEvent.press(screen.getByText('Save'));
+
+      await waitFor(() =>
+        expect(Alert.alert).toHaveBeenCalledWith('Select at least one profile', 'Choose which profiles get this parameter type, or switch to "All Profiles".')
+      );
+      expect(insertParameterType).not.toHaveBeenCalled();
+    });
+
+    test('editing an existing custom type does not show the "Available to" section', async () => {
+      fetchParameterTypes.mockResolvedValue([BP_TYPE, CUSTOM_TYPE]);
+      await render(<ParameterTypesScreen />);
+      await screen.findByText('Weight');
+
+      await fireEvent.press(screen.getByText('Edit'));
+      await screen.findByDisplayValue('Body Weight');
+
+      expect(screen.queryByText('All Profiles')).toBeNull();
+      expect(screen.queryByText('Selected Profiles')).toBeNull();
+    });
   });
 });
