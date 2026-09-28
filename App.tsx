@@ -101,6 +101,7 @@ export default function App() {
                   <Stack.Screen name="Backup" component={BackupScreen} />
                   <Stack.Screen name="Profiles" component={require('./src/screens/ProfileManager').default} />
                   <Stack.Screen name="Parameters" component={require('./src/screens/ParameterTypesScreen').default} />
+                  <Stack.Screen name="ProfileParameterTypes" component={require('./src/screens/ProfileParameterTypesScreen').default} />
                   <Stack.Screen name="BulkDelete" component={require('./src/screens/BulkDeleteScreen').default} />
                   <Stack.Screen name="Paywall" component={require('./src/screens/PaywallScreen').default} />
                   <Stack.Screen name="ReportHistory" component={require('./src/screens/ReportHistoryScreen').default} />

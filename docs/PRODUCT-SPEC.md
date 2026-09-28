@@ -34,7 +34,8 @@ current reality.
 - BP and Diabetes ship as two **pre-seeded, built-in** parameter types using this same registry — not hardcoded/special-cased elsewhere in the app.
 - Readings are stored generically: profile + parameter type + a `vals` JSON blob matching that type's field definitions — **do not** hardcode `systolic`/`diastolic` as top-level SQL columns.
 - New Record flow, Diary rendering, Chart rendering, and Report generation should all be driven off the field definitions generically.
-- v1 UI only exposes BP and Diabetes — no "create custom parameter" UI yet, but the architecture must support adding one as a config entry later. A "create custom parameter" screen is an explicit fast-follow, not required now.
+- Settings → Manage Parameter Types lets users create/edit/delete custom parameter types (BP and Diabetes stay built-in and un-editable).
+- Custom parameter types are **scoped per profile**: at creation, the user assigns the new type to all profiles on the device (a snapshot of profiles existing at that moment) or to specific ones; afterward, each profile's own "Manage Parameters" screen (reachable from Profiles) can add or remove any custom type for that profile. Built-in types are always available to every profile and aren't part of this scoping.
 
 ## App structure — 3 bottom tabs (all scoped to the active profile)
 

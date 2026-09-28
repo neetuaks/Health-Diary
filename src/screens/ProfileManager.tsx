@@ -142,6 +142,7 @@ export default function ProfileManager({ navigation }: any) {
                   <Button label="Make Active" size="sm" variant="secondary" onPress={() => promoteProfile(item.id)} />
                 ) : (
                   <>
+                    <Button label="Parameters" size="sm" variant="secondary" onPress={() => navigation.navigate('ProfileParameterTypes', { profileId: item.id, profileName: item.name })} />
                     <Button label="Edit" size="sm" variant="secondary" onPress={() => openEdit(item)} />
                     <Button label="Delete" size="sm" variant="destructive" onPress={() => remove(item)} />
                   </>

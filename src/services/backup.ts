@@ -32,7 +32,8 @@ export async function createEncryptedBackup(): Promise<CreateBackupResult> {
   const pts = ptsRaw.map((p: any) => ({ ...p, field_definitions: JSON.parse(p.field_definitions) }));
   const readingsRaw = await db.getAllAsync<any>('SELECT * FROM readings;');
   const readings = readingsRaw.map((r: any) => ({ ...r, vals: JSON.parse(r.vals) }));
-  const payloadObj = { profiles, parameter_types: pts, readings };
+  const profileParameterTypes = await db.getAllAsync<any>('SELECT * FROM profile_parameter_types;');
+  const payloadObj = { profiles, parameter_types: pts, readings, profile_parameter_types: profileParameterTypes };
   const payloadStr = JSON.stringify(payloadObj);
   const payload = Buffer.from(payloadStr, 'utf8');
 
@@ -123,6 +124,7 @@ export async function restoreEncryptedBackupFromFile(containerJson: string, reco
   if (options?.replace) {
     // delete existing profiles/readings to fully replace
     try { await db.runAsync('DELETE FROM readings;'); } catch (e) {}
+    try { await db.runAsync('DELETE FROM profile_parameter_types;'); } catch (e) {}
     try { await db.runAsync('DELETE FROM profiles;'); } catch (e) {}
   }
   for (const pt of (obj.parameter_types || [])) {
@@ -133,6 +135,11 @@ export async function restoreEncryptedBackupFromFile(containerJson: string, reco
   for (const p of (obj.profiles || [])) {
     try {
       await db.runAsync('INSERT OR REPLACE INTO profiles (id, name, date_of_birth, glucose_unit_pref, weight_unit_pref, last_backup_at, locked_at) VALUES (?,?,?,?,?,?,?);', [p.id, p.name, p.date_of_birth || null, p.glucose_unit_pref || 'mg/dL', p.weight_unit_pref || 'kg', p.last_backup_at || null, p.locked_at ?? null]);
+    } catch (e) { }
+  }
+  for (const ppt of (obj.profile_parameter_types || [])) {
+    try {
+      await db.runAsync('INSERT OR REPLACE INTO profile_parameter_types (profile_id, parameter_type_id) VALUES (?,?);', [ppt.profile_id, ppt.parameter_type_id]);
     } catch (e) { }
   }
   for (const r of (obj.readings || [])) {

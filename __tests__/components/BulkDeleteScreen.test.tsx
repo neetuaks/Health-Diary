@@ -42,14 +42,14 @@ function reading(id: string, overrides: any = {}) {
 }
 
 jest.mock('../../src/services/profileContext', () => ({ useProfile: jest.fn() }));
-jest.mock('../../src/services/parameterRegistry', () => ({ fetchParameterTypes: jest.fn() }));
+jest.mock('../../src/services/profileParameterTypes', () => ({ fetchParameterTypesForProfile: jest.fn() }));
 jest.mock('../../src/services/readingService', () => ({
   fetchReadingsMatchingFilter: jest.fn(),
   deleteReadingsMatchingFilter: jest.fn()
 }));
 
 const { useProfile } = require('../../src/services/profileContext');
-const { fetchParameterTypes } = require('../../src/services/parameterRegistry');
+const { fetchParameterTypesForProfile } = require('../../src/services/profileParameterTypes');
 const { fetchReadingsMatchingFilter, deleteReadingsMatchingFilter } = require('../../src/services/readingService');
 
 describe('BulkDeleteScreen', () => {
@@ -60,7 +60,7 @@ describe('BulkDeleteScreen', () => {
 
   test('shows a live count scoped to the active profile with the default filter', async () => {
     useProfile.mockReturnValue({ profiles: [PROFILE_A], activeProfile: PROFILE_A });
-    fetchParameterTypes.mockResolvedValue([BP_TYPE, GLUCOSE_TYPE]);
+    fetchParameterTypesForProfile.mockResolvedValue([BP_TYPE, GLUCOSE_TYPE]);
     fetchReadingsMatchingFilter.mockResolvedValue([reading('r1'), reading('r2'), reading('r3')]);
 
     await render(<BulkDeleteScreen />);
@@ -71,7 +71,7 @@ describe('BulkDeleteScreen', () => {
 
   test('selecting a parameter type chip re-queries with that type', async () => {
     useProfile.mockReturnValue({ profiles: [PROFILE_A], activeProfile: PROFILE_A });
-    fetchParameterTypes.mockResolvedValue([BP_TYPE, GLUCOSE_TYPE]);
+    fetchParameterTypesForProfile.mockResolvedValue([BP_TYPE, GLUCOSE_TYPE]);
     fetchReadingsMatchingFilter.mockResolvedValueOnce([reading('r1'), reading('r2')]).mockResolvedValueOnce([reading('r1')]);
 
     await render(<BulkDeleteScreen />);
@@ -86,7 +86,7 @@ describe('BulkDeleteScreen', () => {
 
   test('tapping a date preset chip re-queries with a from/to date range', async () => {
     useProfile.mockReturnValue({ profiles: [PROFILE_A], activeProfile: PROFILE_A });
-    fetchParameterTypes.mockResolvedValue([BP_TYPE]);
+    fetchParameterTypesForProfile.mockResolvedValue([BP_TYPE]);
     fetchReadingsMatchingFilter.mockResolvedValue([reading('r1')]);
 
     await render(<BulkDeleteScreen />);
@@ -105,7 +105,7 @@ describe('BulkDeleteScreen', () => {
 
   test('the Preview toggle expands and collapses the matching-readings list', async () => {
     useProfile.mockReturnValue({ profiles: [PROFILE_A], activeProfile: PROFILE_A });
-    fetchParameterTypes.mockResolvedValue([BP_TYPE]);
+    fetchParameterTypesForProfile.mockResolvedValue([BP_TYPE]);
     fetchReadingsMatchingFilter.mockResolvedValue([reading('r1', { vals: { systolic: 120, diastolic: 80 } })]);
 
     await render(<BulkDeleteScreen />);
@@ -122,7 +122,7 @@ describe('BulkDeleteScreen', () => {
 
   test('the Delete button is disabled when 0 readings match', async () => {
     useProfile.mockReturnValue({ profiles: [PROFILE_A], activeProfile: PROFILE_A });
-    fetchParameterTypes.mockResolvedValue([BP_TYPE]);
+    fetchParameterTypesForProfile.mockResolvedValue([BP_TYPE]);
     fetchReadingsMatchingFilter.mockResolvedValue([]);
 
     await render(<BulkDeleteScreen />);
@@ -134,7 +134,7 @@ describe('BulkDeleteScreen', () => {
 
   test('pressing Delete shows a destructive confirm naming the count; confirming deletes and refreshes to 0', async () => {
     useProfile.mockReturnValue({ profiles: [PROFILE_A], activeProfile: PROFILE_A });
-    fetchParameterTypes.mockResolvedValue([BP_TYPE]);
+    fetchParameterTypesForProfile.mockResolvedValue([BP_TYPE]);
     fetchReadingsMatchingFilter.mockResolvedValueOnce([reading('r1'), reading('r2')]).mockResolvedValueOnce([]);
     deleteReadingsMatchingFilter.mockResolvedValue(2);
 
@@ -157,7 +157,7 @@ describe('BulkDeleteScreen', () => {
 
   test('switching the profile picker recomputes the count against the newly selected profile', async () => {
     useProfile.mockReturnValue({ profiles: [PROFILE_A, PROFILE_B], activeProfile: PROFILE_A });
-    fetchParameterTypes.mockResolvedValue([BP_TYPE]);
+    fetchParameterTypesForProfile.mockResolvedValue([BP_TYPE]);
     fetchReadingsMatchingFilter
       .mockResolvedValueOnce([reading('r1')])
       .mockResolvedValueOnce([reading('r2', { profile_id: 'p2' }), reading('r3', { profile_id: 'p2' })]);

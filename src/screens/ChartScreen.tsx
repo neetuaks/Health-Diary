@@ -3,7 +3,7 @@ import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useProfile } from '../services/profileContext';
 import { fetchReadingsForProfile } from '../services/readingService';
-import { fetchParameterTypes } from '../services/parameterRegistry';
+import { fetchParameterTypesForProfile } from '../services/profileParameterTypes';
 import { useEntitlement } from '../services/entitlement';
 import ReadingsChart from '../components/ReadingsChart';
 import { filterByRange, filterByHistoryWindow, RangeKey, ageInMonthsFromDOB } from '../services/utils';
@@ -27,20 +27,28 @@ export default function ChartScreen() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>('7');
 
-  useEffect(() => { fetchParameterTypes().then(setTypes); }, []);
-
   // Refetches every time this tab is focused, not just once on mount — React
   // Navigation's bottom-tab navigator keeps every tab's screen mounted in the
   // background rather than remounting it on switch, so a plain useEffect keyed on
   // activeProfile only ran once and never picked up readings edited on the Diary
   // tab afterward (no real "cache," just stale state that nothing invalidated).
+  // Parameter types are fetched on the same focus effect (not a separate mount-only
+  // one) for the same reason — they're now profile-scoped, so switching profiles or
+  // editing a profile's parameters elsewhere must be picked up here too.
   useFocusEffect(
     useCallback(() => {
       // Clear rather than just skip the fetch when there's no active profile
       // (e.g. right after "Delete All Data") — otherwise whatever was last
       // fetched for a now-gone profile just keeps rendering.
-      if (!activeProfile) { setReadings([]); return; }
+      if (!activeProfile) { setReadings([]); setTypes([]); setSelectedType(null); return; }
       fetchReadingsForProfile(activeProfile.id).then(rs => setReadings(rs));
+      fetchParameterTypesForProfile(activeProfile.id).then(ts => {
+        setTypes(ts);
+        // A profile switch (or a parameter removed from this profile elsewhere) can
+        // invalidate the previously selected tab — reset so the default-pick effect
+        // below re-runs instead of pointing at a type this profile no longer has.
+        setSelectedType(prev => (prev && ts.some((t: any) => t.id === prev) ? prev : null));
+      });
     }, [activeProfile])
   );
 

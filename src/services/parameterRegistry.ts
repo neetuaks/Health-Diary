@@ -37,10 +37,13 @@ export async function updateParameterType(pt: ParameterType): Promise<void> {
   );
 }
 
-// Same is_builtin guard as updateParameterType.
+// Same is_builtin guard as updateParameterType. Also drops any per-profile scoping rows
+// for this type (see src/services/profileParameterTypes.ts) so they don't linger as
+// orphans once the type itself is gone.
 export async function deleteParameterType(id: string): Promise<void> {
   const db = getDB();
   await db.runAsync('DELETE FROM parameter_types WHERE id = ? AND is_builtin = 0;', [id]);
+  await db.runAsync('DELETE FROM profile_parameter_types WHERE parameter_type_id = ?;', [id]);
 }
 
 // parameter_types has no profile_id column — it's shared across every profile — so this

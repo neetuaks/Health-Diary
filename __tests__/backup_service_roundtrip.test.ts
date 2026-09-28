@@ -87,6 +87,39 @@ describe('backup service roundtrip against real db column names', () => {
     expect(persistedCustom).toBeTruthy();
     expect(JSON.parse(persistedCustom.field_definitions)).toEqual([{ key: 'weight_kg', label: 'Weight', dataType: 'numeric', unit: 'kg', required: true }]);
   });
+
+  test('createEncryptedBackup + restoreEncryptedBackupFromFile round-trips per-profile parameter scoping', async () => {
+    __fakeDb._seedProfiles([
+      { id: 'p1', name: 'Alice', date_of_birth: null, glucose_unit_pref: 'mg/dL', weight_unit_pref: 'kg', last_backup_at: null },
+      { id: 'p2', name: 'Bob', date_of_birth: null, glucose_unit_pref: 'mg/dL', weight_unit_pref: 'kg', last_backup_at: null }
+    ]);
+    __fakeDb._seedParameterTypes([
+      {
+        id: 'custom-weight-id',
+        display_name: 'Weight',
+        icon: null,
+        color: null,
+        is_builtin: 0,
+        field_definitions: JSON.stringify([{ key: 'weight_kg', label: 'Weight', dataType: 'numeric', unit: 'kg', required: true }])
+      }
+    ]);
+    // Only Alice (p1) has Weight assigned — Bob (p2) doesn't.
+    __fakeDb._seedProfileParameterTypes([{ profile_id: 'p1', parameter_type_id: 'custom-weight-id' }]);
+
+    await createEncryptedBackup();
+    const [, containerJson] = FileSystem.writeAsStringAsync.mock.calls[0];
+
+    const { getStoredRecoveryKey } = require('../src/services/crypto');
+    const recovery = await getStoredRecoveryKey();
+
+    __fakeDb._reset();
+    const restored = await restoreEncryptedBackupFromFile(containerJson, recovery);
+
+    expect(restored.profile_parameter_types).toEqual([{ profile_id: 'p1', parameter_type_id: 'custom-weight-id' }]);
+
+    const persisted = await __fakeDb.getAllAsync('SELECT * FROM profile_parameter_types;');
+    expect(persisted).toEqual([{ profile_id: 'p1', parameter_type_id: 'custom-weight-id' }]);
+  });
 });
 
 describe('readLocalBackupCopy', () => {

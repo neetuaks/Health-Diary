@@ -9,7 +9,7 @@ import { fetchReadingsForProfile, deleteReading } from '../services/readingServi
 import ReadingItem from '../components/ReadingItem';
 import NewRecordModal from '../components/NewRecordModal';
 import { ParameterType } from '../types';
-import { fetchParameterTypes } from '../services/parameterRegistry';
+import { fetchParameterTypesForProfile } from '../services/profileParameterTypes';
 import { useEntitlement } from '../services/entitlement';
 import { showUpgradePrompt } from '../services/paywallPrompt';
 import { filterByHistoryWindow } from '../services/utils';
@@ -43,8 +43,14 @@ export default function DiaryScreen() {
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    fetchParameterTypes().then(setParamTypes);
-  }, []);
+    // A profile switch can change which custom types are available — clear the
+    // selected tab so the effect below re-picks a default valid for this profile,
+    // rather than leaving it pointed at a type the new profile may not have.
+    setSelectedTypeId(null);
+    fetchParameterTypesForProfile(activeProfile?.id ?? null).then(setParamTypes);
+    // Depend on the id, not the activeProfile object — see NewRecordModal for why.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id]);
 
   // BP is the default tab when present, otherwise whichever type loads first.
   useEffect(() => {
