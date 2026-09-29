@@ -10,7 +10,7 @@ import { generateReportPDF } from '../services/pdf';
 import { persistAndRecordPdf } from '../services/pdfHistory';
 import { downloadPdfToDevice } from '../services/pdfDownload';
 import ReadingsChart from '../components/ReadingsChart';
-import { filterByRange, filterByHistoryWindow, RangeKey, ageFromDOB, ageInMonthsFromDOB, fieldClassification, clinicalColorKey } from '../services/utils';
+import { filterByRange, filterByHistoryWindow, RangeKey, ageFromDOB, ageInMonthsFromDOB, fieldClassification, clinicalColorKey, formatFieldValue } from '../services/utils';
 import { Screen, Card, SegmentedControl, EmptyState, Banner } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
 
@@ -144,6 +144,16 @@ export default function ReportScreen() {
           </TouchableOpacity>
         )}
         <TouchableOpacity
+          style={styles.shareButton}
+          onPress={() => {
+            if (limits.consolidatedReport) navigation.navigate('ConsolidatedReport');
+            else showUpgradePrompt(navigation, 'A consolidated report covering several profiles at once needs Premium.');
+          }}
+          accessibilityLabel="Consolidated family report"
+        >
+          <Text style={{ fontSize: 16 }}>{'👪'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.shareButton, (downloading || sortedScoped.length === 0) && styles.shareButtonDisabled]}
           onPress={handleDownload}
           disabled={downloading || sortedScoped.length === 0}
@@ -206,11 +216,7 @@ export default function ReportScreen() {
                           <Text style={[styles.tableCell, { width: COL_WIDTH }]}>{d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</Text>
                           <Text style={[styles.tableCell, { width: COL_WIDTH }]}>{d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</Text>
                           {fields.map((f: any) => {
-                            const val = it.vals[f.key];
-                            const hasValue = val !== undefined && val !== '';
-                            const display = hasValue
-                              ? (f.dataType !== 'numeric' ? (f.optionShortLabels?.[val] ?? f.optionLabels?.[val] ?? String(val)) : String(val))
-                              : '—';
+                            const display = formatFieldValue(f, it.vals[f.key]);
                             const cls = f.dataType === 'numeric' && selectedTypeId ? fieldClassification(selectedTypeId, f.key, it.vals, ageInMonths) : null;
                             return (
                               <Text

@@ -172,6 +172,19 @@ export function clinicalLabel(classification: ClinicalClassification): string {
   }
 }
 
+// Formats one reading value for display — an enum's short/full option label if it
+// has one, otherwise the raw value, or an em dash when absent. Was duplicated
+// three ways (ReadingItem, ReportScreen, pdf.ts) before being pulled out here;
+// now every table (Diary, Report, PDF, Family Dashboard) formats a cell the same way.
+export function formatFieldValue(field: FieldDefinition, val: any): string {
+  const hasValue = val !== undefined && val !== null && val !== '';
+  if (!hasValue) return '—';
+  if (field.dataType !== 'numeric') {
+    return field.optionShortLabels?.[val] ?? field.optionLabels?.[val] ?? String(val);
+  }
+  return String(val);
+}
+
 // Which value(s) of a reading get clinical coloring, and by what classification.
 // Shared by ReadingItem (Diary), ChartScreen (dot color), and ReportScreen (table
 // cells) so the "what counts as normal/elevated/high" rule lives in one place.

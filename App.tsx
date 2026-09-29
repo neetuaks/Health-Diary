@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DiaryScreen from './src/screens/DiaryScreen';
 import ChartScreen from './src/screens/ChartScreen';
 import ReportScreen from './src/screens/ReportScreen';
+import FamilyDashboardScreen from './src/screens/FamilyDashboardScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import BackupScreen from './src/screens/BackupScreen';
 import ProfileContextProvider, { useProfile } from './src/services/profileContext';
@@ -23,6 +24,7 @@ const TAB_ICONS: Record<string, string> = {
   Diary: '📔',
   Chart: '📈',
   Report: '📄',
+  Family: '👪',
   SettingsTab: '⚙️',
 };
 
@@ -81,6 +83,7 @@ function MainTabs() {
         <Tab.Screen name="Diary" component={DiaryScreen} />
         <Tab.Screen name="Chart" component={ChartScreen} />
         <Tab.Screen name="Report" component={ReportScreen} />
+        <Tab.Screen name="Family" component={FamilyDashboardScreen} />
         <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Tab.Navigator>
     </>
@@ -105,6 +108,7 @@ export default function App() {
                   <Stack.Screen name="BulkDelete" component={require('./src/screens/BulkDeleteScreen').default} />
                   <Stack.Screen name="Paywall" component={require('./src/screens/PaywallScreen').default} />
                   <Stack.Screen name="ReportHistory" component={require('./src/screens/ReportHistoryScreen').default} />
+                  <Stack.Screen name="ConsolidatedReport" component={require('./src/screens/ConsolidatedReportScreen').default} />
                 </Stack.Navigator>
               </NavigationContainer>
             </EntitlementProvider>

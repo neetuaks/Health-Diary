@@ -64,7 +64,8 @@ flowchart LR
 | `src/services/ocr.ts` | Native OCR dispatch and fallback boundary |
 | `src/services/ocrParsing.ts` | JavaScript OCR text parsing heuristics |
 | `src/services/dataExport.ts` | Plain JSON and CSV exports |
-| `src/services/pdf.ts` | HTML/SVG report generation and PDF sharing |
+| `src/services/pdf.ts` | HTML/SVG report generation (single-profile and consolidated multi-profile) and PDF creation |
+| `src/services/familyDashboard.ts` | Per-profile latest-reading aggregation for the Family tab (Premium) — reuses Diary/Chart's own clinical classification, adds no thresholds of its own |
 | `src/services/diagnosticsLog.ts` | Local diagnostic log and sharing |
 | `src/screens/` | User-facing workflows |
 | `src/components/` | Reusable modals and reading UI |

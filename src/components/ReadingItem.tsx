@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Reading, ParameterType } from '../types';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { fieldClassification, clinicalColorKey, diaryColumnFields } from '../services/utils';
+import { fieldClassification, clinicalColorKey, diaryColumnFields, formatFieldValue } from '../services/utils';
 import { colors, spacing, radius } from '../theme/tokens';
 
 type Props = {
@@ -53,7 +53,7 @@ export default function ReadingItem({ reading, parameterType, onDelete, onPress,
             const hasValue = raw !== undefined && raw !== null && raw !== '';
 
             if (f.dataType !== 'numeric') {
-              const label = hasValue ? (f.optionShortLabels?.[raw] ?? f.optionLabels?.[raw] ?? String(raw)) : '—';
+              const label = formatFieldValue(f, raw);
               return (
                 <View key={f.key} style={styles.valueCell}>
                   <Text style={styles.tagText} numberOfLines={1}>{label}</Text>
