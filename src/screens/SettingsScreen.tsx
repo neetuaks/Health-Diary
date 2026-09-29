@@ -3,7 +3,7 @@ import { View, Text, Alert, TextInput, StyleSheet } from 'react-native';
 import { exportAllAsJSON, exportAllAsCSV } from '../services/dataExport';
 import { emailDiagnostics } from '../services/diagnosticsLog';
 import { useEntitlement } from '../services/entitlement';
-import { TIER_DISPLAY_NAME } from '../services/limits';
+import { TIER_DISPLAY_NAME, Tier } from '../services/limits';
 import ConfirmDeleteAllModal from '../components/ConfirmDeleteAllModal';
 import { getBackupReminderDays, setBackupReminderDays } from '../services/appSettings';
 import { Screen, Card, Button, Banner, ListButton } from '../theme/components';
@@ -16,7 +16,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 const divider = { borderBottomWidth: 1, borderBottomColor: colors.border };
 
 export default function SettingsScreen({ navigation }: any) {
-  const { tier, limits } = useEntitlement();
+  const { tier, limits, debugTierOverride, setDebugTier } = useEntitlement();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [reminderDays, setReminderDaysState] = useState<number>(30);
 
@@ -49,6 +49,37 @@ export default function SettingsScreen({ navigation }: any) {
           onPress={() => navigation.navigate('Paywall')}
         />
       </Card>
+
+      {__DEV__ && (
+        <>
+          <SectionLabel>Debug (dev builds only)</SectionLabel>
+          <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
+            <View style={{ paddingVertical: spacing.md }}>
+              <Text style={typography.body}>
+                Force a tier locally to test Pro/Premium gates — bypasses RevenueCat entirely.
+                {debugTierOverride ? ` Currently forced to ${TIER_DISPLAY_NAME[debugTierOverride]}.` : ' Not overridden — using the real subscription state.'}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' }}>
+                {(['free', 'pro', 'premium'] as Tier[]).map(t => (
+                  <Button
+                    key={t}
+                    label={TIER_DISPLAY_NAME[t]}
+                    size="sm"
+                    variant={debugTierOverride === t ? 'primary' : 'secondary'}
+                    onPress={() => setDebugTier(t)}
+                  />
+                ))}
+                <Button
+                  label="Clear override"
+                  size="sm"
+                  variant="ghost"
+                  onPress={() => setDebugTier(null)}
+                />
+              </View>
+            </View>
+          </Card>
+        </>
+      )}
 
       <SectionLabel>Backup</SectionLabel>
       <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>

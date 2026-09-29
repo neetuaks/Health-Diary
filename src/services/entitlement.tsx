@@ -8,6 +8,7 @@ import {
   addCustomerInfoUpdateListener,
   PurchasesCustomerInfo,
 } from './purchases';
+import { getDebugTierOverride, setDebugTierOverride } from './debugTierOverride';
 
 export { tierFromCustomerInfo } from './tierMapping';
 
@@ -19,6 +20,10 @@ type EntitlementContextType = {
   loading: boolean;
   customerInfo: PurchasesCustomerInfo | null;
   refresh: () => Promise<void>;
+  // __DEV__-only — see debugTierOverride.ts. null tier clears the override
+  // and returns to whatever RevenueCat actually reports.
+  debugTierOverride: Tier | null;
+  setDebugTier: (tier: Tier | null) => Promise<void>;
 };
 
 const EntitlementContext = createContext<EntitlementContextType>({
@@ -29,6 +34,8 @@ const EntitlementContext = createContext<EntitlementContextType>({
   loading: true,
   customerInfo: null,
   refresh: async () => {},
+  debugTierOverride: null,
+  setDebugTier: async () => {},
 });
 
 function readApiKey(): string {
@@ -47,6 +54,7 @@ function readApiKey(): string {
 export default function EntitlementProvider({ children }: { children: React.ReactNode }) {
   const [customerInfo, setCustomerInfo] = useState<PurchasesCustomerInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [debugTierOverride, setDebugTierOverrideState] = useState<Tier | null>(null);
   const unsubRef = useRef<() => void>(() => {});
 
   const refresh = async () => {
@@ -56,6 +64,11 @@ export default function EntitlementProvider({ children }: { children: React.Reac
     } catch {
       setCustomerInfo(null);
     }
+  };
+
+  const setDebugTier = async (tier: Tier | null) => {
+    await setDebugTierOverride(tier);
+    setDebugTierOverrideState(tier);
   };
 
   useEffect(() => {
@@ -71,6 +84,7 @@ export default function EntitlementProvider({ children }: { children: React.Reac
         if (!cancelled) setLoading(false);
       }
     })();
+    getDebugTierOverride().then(t => { if (!cancelled) setDebugTierOverrideState(t); });
     unsubRef.current = addCustomerInfoUpdateListener(info => setCustomerInfo(info));
     return () => {
       cancelled = true;
@@ -78,12 +92,22 @@ export default function EntitlementProvider({ children }: { children: React.Reac
     };
   }, []);
 
-  const tier = tierFromCustomerInfo(customerInfo);
+  const tier = debugTierOverride ?? tierFromCustomerInfo(customerInfo);
   const limits = LIMITS[tier];
 
   return (
     <EntitlementContext.Provider
-      value={{ tier, limits, isPro: tier === 'pro', isPremium: tier === 'premium', loading, customerInfo, refresh }}
+      value={{
+        tier,
+        limits,
+        isPro: tier === 'pro',
+        isPremium: tier === 'premium',
+        loading,
+        customerInfo,
+        refresh,
+        debugTierOverride,
+        setDebugTier,
+      }}
     >
       {children}
     </EntitlementContext.Provider>
