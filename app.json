@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "health-diary",
+    "name": "Readiva",
     "slug": "health-diary",
     "version": "0.1.0",
     "sdkVersion": "57.0.0",
@@ -10,7 +10,13 @@
       "web"
     ],
     "android": {
-      "package": "com.expo.HealthDiary"
+      "package": "com.wisdomveda.readiva",
+      "permissions": [
+        "com.android.vending.BILLING"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.wisdomveda.readiva"
     },
     "plugins": [
       "expo-splash-screen",
