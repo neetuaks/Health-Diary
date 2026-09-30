@@ -3,6 +3,12 @@ import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import ParameterTypesScreen from '../../src/screens/ParameterTypesScreen';
 
+// ParameterTypesScreen now reads useNavigation() directly (to deep-link the
+// paywall gate) rather than taking a navigation prop — this component is
+// rendered bare here (no NavigationContainer ancestor), so the real hook
+// would throw "Couldn't find a navigation object" without this mock.
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: jest.fn() }) }));
+
 const BP_TYPE = {
   id: 'bp',
   display_name: 'Blood Pressure',
@@ -43,6 +49,26 @@ jest.mock('../../src/services/parameterRegistry', () => ({
   countReadingsForParameterType: jest.fn()
 }));
 
+// Premium's limits by default (effectively unlimited for this file's purposes)
+// so every pre-existing CRUD-flow test below keeps exercising the Add/Edit/
+// Delete flow itself, undisturbed by the paywall gate — PAYWALL-SPEC §4.2's
+// gate has its own dedicated describe block further down, which overrides
+// this per test.
+jest.mock('../../src/services/entitlement', () => ({
+  useEntitlement: jest.fn(() => ({ limits: { maxCustomParams: 8 } })),
+}));
+jest.mock('../../src/services/entitlementLocks', () => ({
+  reconcileAndPersistParameterTypeLocks: jest.fn(async () => ({ toLock: [], toUnlock: [] })),
+}));
+
+jest.mock('../../src/services/profileContext', () => ({
+  useProfile: jest.fn()
+}));
+
+jest.mock('../../src/services/profileParameterTypes', () => ({
+  assignParameterTypeToProfiles: jest.fn()
+}));
+
 const {
   fetchParameterTypes,
   insertParameterType,
@@ -50,6 +76,9 @@ const {
   deleteParameterType,
   countReadingsForParameterType
 } = require('../../src/services/parameterRegistry');
+const { useEntitlement } = require('../../src/services/entitlement');
+const { useProfile } = require('../../src/services/profileContext');
+const { assignParameterTypeToProfiles } = require('../../src/services/profileParameterTypes');
 
 describe('ParameterTypesScreen', () => {
   beforeEach(() => {
@@ -58,6 +87,11 @@ describe('ParameterTypesScreen', () => {
     // render()/`screen` on every test after the first in this file.
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    useEntitlement.mockReturnValue({ limits: { maxCustomParams: 8 } });
+    // No profiles by default — matches every pre-existing test in this file, which
+    // predates per-profile scoping and asserts nothing about the "Available to"
+    // section. It only renders once there's at least one profile (see below).
+    useProfile.mockReturnValue({ profiles: [] });
   });
 
   test('renders built-in types with a Built-in tag and no Edit/Delete buttons', async () => {
@@ -201,5 +235,119 @@ describe('ParameterTypesScreen', () => {
       expect(Alert.alert).toHaveBeenCalledWith("Can't delete", '3 readings use "Weight". Delete them first, then try again.')
     );
     expect(deleteParameterType).not.toHaveBeenCalled();
+  });
+
+  describe('profile scope on creation', () => {
+    beforeEach(() => {
+      useProfile.mockReturnValue({ profiles: [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }] });
+    });
+
+    test('defaults to "All Profiles" and assigns the new type to every profile', async () => {
+      fetchParameterTypes.mockResolvedValueOnce([BP_TYPE]).mockResolvedValueOnce([BP_TYPE, CUSTOM_TYPE]);
+      insertParameterType.mockResolvedValue(CUSTOM_TYPE);
+      await render(<ParameterTypesScreen />);
+      await screen.findByText('Blood Pressure');
+
+      await fireEvent.press(screen.getByText('Add Parameter Type'));
+      await fireEvent.changeText(screen.getByPlaceholderText('e.g. Weight'), 'Weight');
+      await fireEvent.changeText(screen.getByPlaceholderText('Label (e.g. Weight)'), 'Weight');
+      expect(screen.getByText('All Profiles')).toBeTruthy();
+      // "Selected Profiles" not chosen — no per-profile chips should render.
+      expect(screen.queryByText('Alice')).toBeNull();
+
+      await fireEvent.press(screen.getByText('Save'));
+
+      await waitFor(() => expect(assignParameterTypeToProfiles).toHaveBeenCalledWith(CUSTOM_TYPE.id, ['p1', 'p2']));
+    });
+
+    test('"Selected Profiles" assigns only the chosen profiles', async () => {
+      fetchParameterTypes.mockResolvedValueOnce([BP_TYPE]).mockResolvedValueOnce([BP_TYPE, CUSTOM_TYPE]);
+      insertParameterType.mockResolvedValue(CUSTOM_TYPE);
+      await render(<ParameterTypesScreen />);
+      await screen.findByText('Blood Pressure');
+
+      await fireEvent.press(screen.getByText('Add Parameter Type'));
+      await fireEvent.changeText(screen.getByPlaceholderText('e.g. Weight'), 'Weight');
+      await fireEvent.changeText(screen.getByPlaceholderText('Label (e.g. Weight)'), 'Weight');
+      await fireEvent.press(screen.getByText('Selected Profiles'));
+      await fireEvent.press(screen.getByText('Alice'));
+      await fireEvent.press(screen.getByText('Save'));
+
+      await waitFor(() => expect(assignParameterTypeToProfiles).toHaveBeenCalledWith(CUSTOM_TYPE.id, ['p1']));
+    });
+
+    test('rejects save when "Selected Profiles" has none chosen', async () => {
+      fetchParameterTypes.mockResolvedValue([BP_TYPE]);
+      await render(<ParameterTypesScreen />);
+      await screen.findByText('Blood Pressure');
+
+      await fireEvent.press(screen.getByText('Add Parameter Type'));
+      await fireEvent.changeText(screen.getByPlaceholderText('e.g. Weight'), 'Weight');
+      await fireEvent.changeText(screen.getByPlaceholderText('Label (e.g. Weight)'), 'Weight');
+      await fireEvent.press(screen.getByText('Selected Profiles'));
+      await fireEvent.press(screen.getByText('Save'));
+
+      await waitFor(() =>
+        expect(Alert.alert).toHaveBeenCalledWith('Select at least one profile', 'Choose which profiles get this parameter type, or switch to "All Profiles".')
+      );
+      expect(insertParameterType).not.toHaveBeenCalled();
+    });
+
+    test('editing an existing custom type does not show the "Available to" section', async () => {
+      fetchParameterTypes.mockResolvedValue([BP_TYPE, CUSTOM_TYPE]);
+      await render(<ParameterTypesScreen />);
+      await screen.findByText('Weight');
+
+      await fireEvent.press(screen.getByText('Edit'));
+      await screen.findByDisplayValue('Body Weight');
+
+      expect(screen.queryByText('All Profiles')).toBeNull();
+      expect(screen.queryByText('Selected Profiles')).toBeNull();
+    });
+  });
+});
+
+describe('ParameterTypesScreen custom-param limit gate (PAYWALL-SPEC §4.2)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+
+  test('at the limit: "Add Parameter Type" shows an upgrade prompt instead of opening the form', async () => {
+    useEntitlement.mockReturnValue({ limits: { maxCustomParams: 1 } });
+    fetchParameterTypes.mockResolvedValue([BP_TYPE, CUSTOM_TYPE]);
+    await render(<ParameterTypesScreen />);
+    await screen.findByText('Weight');
+
+    await fireEvent.press(screen.getByText('Add Parameter Type'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith(
+      'Upgrade to unlock this',
+      "Your plan covers 1 custom parameter type. Upgrade to add another.",
+      expect.any(Array)
+    ));
+    expect(screen.queryByPlaceholderText('e.g. Weight')).toBeNull();
+  });
+
+  test('under the limit: "Add Parameter Type" opens the form as normal', async () => {
+    useEntitlement.mockReturnValue({ limits: { maxCustomParams: 4 } });
+    fetchParameterTypes.mockResolvedValue([BP_TYPE, CUSTOM_TYPE]);
+    await render(<ParameterTypesScreen />);
+    await screen.findByText('Weight');
+
+    await fireEvent.press(screen.getByText('Add Parameter Type'));
+
+    expect(await screen.findByPlaceholderText('e.g. Weight')).toBeTruthy();
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  test('a locked custom type shows a Locked badge instead of Edit/Delete', async () => {
+    useEntitlement.mockReturnValue({ limits: { maxCustomParams: 1 } });
+    fetchParameterTypes.mockResolvedValue([BP_TYPE, { ...CUSTOM_TYPE, locked_at: '2024-01-01T00:00:00.000Z' }]);
+    await render(<ParameterTypesScreen />);
+
+    expect(await screen.findByText(/Weight.*Locked/)).toBeTruthy();
+    expect(screen.queryByText('Edit')).toBeNull();
+    expect(screen.queryByText('Delete')).toBeNull();
   });
 });

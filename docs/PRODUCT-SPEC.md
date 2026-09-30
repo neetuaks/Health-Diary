@@ -34,9 +34,10 @@ current reality.
 - BP and Diabetes ship as two **pre-seeded, built-in** parameter types using this same registry — not hardcoded/special-cased elsewhere in the app.
 - Readings are stored generically: profile + parameter type + a `vals` JSON blob matching that type's field definitions — **do not** hardcode `systolic`/`diastolic` as top-level SQL columns.
 - New Record flow, Diary rendering, Chart rendering, and Report generation should all be driven off the field definitions generically.
-- v1 UI only exposes BP and Diabetes — no "create custom parameter" UI yet, but the architecture must support adding one as a config entry later. A "create custom parameter" screen is an explicit fast-follow, not required now.
+- Settings → Manage Parameter Types lets users create/edit/delete custom parameter types (BP and Diabetes stay built-in and un-editable).
+- Custom parameter types are **scoped per profile**: at creation, the user assigns the new type to all profiles on the device (a snapshot of profiles existing at that moment) or to specific ones; afterward, each profile's own "Manage Parameters" screen (reachable from Profiles) can add or remove any custom type for that profile. Built-in types are always available to every profile and aren't part of this scoping.
 
-## App structure — 3 bottom tabs (all scoped to the active profile)
+## App structure — 4 bottom tabs (all scoped to the active profile)
 
 ### Tab 1: Diary
 - Reverse-chronological list of all readings, grouped by day with sticky headers ("Today", "Yesterday", dates).
@@ -51,9 +52,14 @@ current reality.
 - Summary stats below: Average, Min, Max, reading count. Use `react-native-gifted-charts` or `victory-native`.
 
 ### Tab 3: Report
-- Controls: date range (with presets), parameter filter (BP/Diabetes/Both), Print/Save PDF/Share buttons.
+- Controls: date range (with presets), parameter filter (BP/Diabetes/Both).
 - Content: Profile Name + Age, chosen date range, chart(s) for range+filter (reuse Tab 2 components), full chronological reading list.
-- PDF via `expo-print` (`Print.printToFileAsync`), share via `expo-sharing`, print via `Print.printAsync` directly.
+- **Free**: on-screen preview only (last 7 days, "PREVIEW" marker) — no PDF file is ever written. **Pro/Premium**: Download PDF (device Downloads/Files, not the OS share sheet — see `docs/PAYWALL-SPEC.md` §6) plus a Report History of past downloads. PDF via `expo-print` (`Print.printToFileAsync`).
+- **Consolidated report** entry (Premium only, see `docs/PAYWALL-SPEC.md` and `docs/FAMILY-FEATURES-SPEC.md`): one PDF covering several chosen profiles, each in its own section.
+
+### Tab 4: Family (Premium)
+- One card per tracked profile: latest reading per parameter, its timestamp, and clinical range color (reusing Tab 1/2's own thresholds — not a second classification system); flags a profile/parameter that's out of range or has gone stale with no new reading. Tap a card to switch to that profile's Diary.
+- Free/Pro see the same tab as a locked upsell routing to the paywall, rather than the tab being hidden — see `docs/FAMILY-FEATURES-SPEC.md`.
 
 ## New Record creation (2 methods for v1 — Bluetooth deferred, see below)
 1. **Manual Entry** — pick parameter type (from registry) → BP fields (Systolic, Diastolic, Pulse numeric; Arm segmented Left/Right, default Left) or Diabetes field (single glucose numeric, unit per profile pref) → date/time defaults to now, always editable.

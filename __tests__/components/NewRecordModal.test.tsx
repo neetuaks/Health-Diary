@@ -14,7 +14,7 @@ const BP_TYPE = {
   ],
 };
 
-jest.mock('../../src/services/parameterRegistry', () => ({ fetchParameterTypes: jest.fn(async () => [BP_TYPE]) }));
+jest.mock('../../src/services/profileParameterTypes', () => ({ fetchParameterTypesForProfile: jest.fn(async () => [BP_TYPE]) }));
 jest.mock('../../src/services/readingService', () => ({
   insertReading: jest.fn(async (r: any) => ({ ...r, id: 'r1', created_at: '2024-01-01T00:00:00.000Z' })),
   updateReading: jest.fn(async () => {}),

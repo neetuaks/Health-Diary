@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { fetchParameterTypes } from '../services/parameterRegistry';
+import { fetchParameterTypesForProfile } from '../services/profileParameterTypes';
 import { insertReading, updateReading } from '../services/readingService';
 import { useProfile } from '../services/profileContext';
 import { classifyBP, clinicalColorKey, clinicalLabel, mgdlToMmolL, mmolLToMgdl } from '../services/utils';
@@ -109,9 +109,21 @@ export default function NewRecordModal({ visible, onClose, onSaved, editingReadi
     }
   }, [visible, editingReading, initialValues]);
 
+  // Excludes any custom parameter type locked by a tier downgrade (PAYWALL-SPEC
+  // §7) from what can be picked for a NEW reading — it isn't deleted, so an
+  // existing reading of that type is still editable (editingReading's own type
+  // is always kept in, regardless of lock state).
   useEffect(() => {
-    fetchParameterTypes().then(setTypes);
-  }, []);
+    fetchParameterTypesForProfile(activeProfile?.id ?? null).then(all => {
+      const loggable = all.filter(t => !t.locked_at || t.id === editingReading?.parameter_type_id);
+      setTypes(loggable);
+    });
+    // Depend on the id, not the activeProfile object itself — profileContext
+    // recomputes a fresh object on every provider render, so an object dependency
+    // here would refetch (and re-render) on every render, not just a real profile
+    // switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id, editingReading]);
 
   // Depends on selectedTypeId too (not just types) — the modal-open reset effect above
   // clears selectedTypeId to null on every fresh "Add", and `types` itself only loads

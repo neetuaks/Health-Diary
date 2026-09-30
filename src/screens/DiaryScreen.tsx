@@ -9,7 +9,10 @@ import { fetchReadingsForProfile, deleteReading } from '../services/readingServi
 import ReadingItem from '../components/ReadingItem';
 import NewRecordModal from '../components/NewRecordModal';
 import { ParameterType } from '../types';
-import { fetchParameterTypes } from '../services/parameterRegistry';
+import { fetchParameterTypesForProfile } from '../services/profileParameterTypes';
+import { useEntitlement } from '../services/entitlement';
+import { showUpgradePrompt } from '../services/paywallPrompt';
+import { filterByHistoryWindow } from '../services/utils';
 import { Screen, Banner, EmptyState, SegmentedControl } from '../theme/components';
 import { colors, spacing, radius } from '../theme/tokens';
 
@@ -17,6 +20,8 @@ const DATE_COL_WIDTH = 60;
 
 export default function DiaryScreen() {
   const { activeProfile } = useProfile();
+  const { limits } = useEntitlement();
+  const navigation = useNavigation<any>();
   const [readings, setReadings] = useState<any[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [paramTypes, setParamTypes] = useState<ParameterType[]>([]);
@@ -36,11 +41,16 @@ export default function DiaryScreen() {
   const [contentHeight, setContentHeight] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const listRef = useRef<FlatList>(null);
-  const navigation = useNavigation<any>();
 
   useEffect(() => {
-    fetchParameterTypes().then(setParamTypes);
-  }, []);
+    // A profile switch can change which custom types are available — clear the
+    // selected tab so the effect below re-picks a default valid for this profile,
+    // rather than leaving it pointed at a type the new profile may not have.
+    setSelectedTypeId(null);
+    fetchParameterTypesForProfile(activeProfile?.id ?? null).then(setParamTypes);
+    // Depend on the id, not the activeProfile object — see NewRecordModal for why.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id]);
 
   // BP is the default tab when present, otherwise whichever type loads first.
   useEffect(() => {
@@ -72,11 +82,15 @@ export default function DiaryScreen() {
 
   const selectedType = paramTypes.find(t => t.id === selectedTypeId) ?? null;
   const columnFields = diaryColumnFields(selectedType);
+  const windowedReadings = filterByHistoryWindow(readings, limits.historyWindowDays);
   const filteredReadings = selectedTypeId
-    ? readings
+    ? windowedReadings
         .filter(r => r.parameter_type_id === selectedTypeId)
         .sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime())
     : [];
+  // Free's 7-day view cap hides older readings, never deletes them — surfaced
+  // as a visible banner (not a silent gap) per PAYWALL-SPEC §4.3.
+  const hasOlderHiddenReadings = limits.historyWindowDays !== null && readings.length > windowedReadings.length;
 
   // Stable reference (memoized on the id, not recreated every render) so opening the
   // modal for a new entry doesn't retrigger its reset effect while it's already open —
@@ -105,6 +119,14 @@ export default function DiaryScreen() {
             />
           )}
 
+          {hasOlderHiddenReadings && (
+            <Banner
+              variant="info"
+              message="Showing last 7 days. See your full history with Pro."
+              onPress={() => navigation.navigate('Paywall')}
+            />
+          )}
+
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
               <SegmentedControl
@@ -113,7 +135,17 @@ export default function DiaryScreen() {
                 onChange={setSelectedTypeId}
               />
             </View>
-            <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)} accessibilityLabel="Add record">
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => {
+                if (selectedType?.locked_at) {
+                  showUpgradePrompt(navigation, `"${selectedType.display_name}" is locked because it's over your current plan's limit. Upgrade to log new entries for it again.`);
+                  return;
+                }
+                setModalVisible(true);
+              }}
+              accessibilityLabel="Add record"
+            >
               <Text style={styles.addButtonGlyph}>+</Text>
             </TouchableOpacity>
           </View>

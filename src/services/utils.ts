@@ -25,6 +25,16 @@ export function filterByRange(readings: any[], range: RangeKey) {
   return readings.filter(r => new Date(r.recorded_at) >= start);
 }
 
+// The Free tier's in-app visibility / export cap (PAYWALL-SPEC §2-4): readings
+// older than `windowDays` are excluded from what's shown/exported, never
+// deleted — `null` (paid tiers) means no cap at all.
+export function filterByHistoryWindow<T extends { recorded_at: string }>(readings: T[], windowDays: number | null): T[] {
+  if (windowDays === null) return readings;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - windowDays);
+  return readings.filter(r => new Date(r.recorded_at) >= cutoff);
+}
+
 export function mgdlToMmolL(value: number) {
   return +(value / 18.0182).toFixed(2);
 }
@@ -160,6 +170,19 @@ export function clinicalLabel(classification: ClinicalClassification): string {
     case 'pulse-high': return 'High (Tachycardia)';
     case 'normal': return 'Normal';
   }
+}
+
+// Formats one reading value for display — an enum's short/full option label if it
+// has one, otherwise the raw value, or an em dash when absent. Was duplicated
+// three ways (ReadingItem, ReportScreen, pdf.ts) before being pulled out here;
+// now every table (Diary, Report, PDF, Family Dashboard) formats a cell the same way.
+export function formatFieldValue(field: FieldDefinition, val: any): string {
+  const hasValue = val !== undefined && val !== null && val !== '';
+  if (!hasValue) return '—';
+  if (field.dataType !== 'numeric') {
+    return field.optionShortLabels?.[val] ?? field.optionLabels?.[val] ?? String(val);
+  }
+  return String(val);
 }
 
 // Which value(s) of a reading get clinical coloring, and by what classification.

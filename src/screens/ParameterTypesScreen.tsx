@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, TextInput, Modal, Alert, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { ParameterType, FieldDefinition } from '../types';
 import {
   fetchParameterTypes,
@@ -8,6 +9,11 @@ import {
   deleteParameterType,
   countReadingsForParameterType
 } from '../services/parameterRegistry';
+import { useEntitlement } from '../services/entitlement';
+import { showUpgradePrompt } from '../services/paywallPrompt';
+import { reconcileAndPersistParameterTypeLocks } from '../services/entitlementLocks';
+import { assignParameterTypeToProfiles } from '../services/profileParameterTypes';
+import { useProfile } from '../services/profileContext';
 import { slugifyFieldKey } from '../services/utils';
 import { Screen, Card, Button, EmptyState } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
@@ -30,10 +36,17 @@ type FieldRowState = {
   optionsText: string;
 };
 
+type ProfileScope = 'all' | 'selected';
+
 type FormState = {
   id?: string;
   display_name: string;
   fields: FieldRowState[];
+  // Only meaningful when creating (form.id is undefined) — editing an existing type
+  // never touches which profiles it's assigned to; that's managed later from each
+  // profile's own "Manage Parameters" screen.
+  profileScope: ProfileScope;
+  selectedProfileIds: string[];
 };
 
 function parseOptions(text: string): string[] {
@@ -49,9 +62,12 @@ function parseOptions(text: string): string[] {
 }
 
 export default function ParameterTypesScreen() {
+  const navigation = useNavigation<any>();
+  const { limits } = useEntitlement();
+  const { profiles } = useProfile();
   const [types, setTypes] = useState<ParameterType[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState<FormState>({ display_name: '', fields: [] });
+  const [form, setForm] = useState<FormState>({ display_name: '', fields: [], profileScope: 'all', selectedProfileIds: [] });
   const newFieldCounter = useRef(0);
 
   const refresh = () => fetchParameterTypes().then(setTypes);
@@ -59,6 +75,23 @@ export default function ParameterTypesScreen() {
   useEffect(() => {
     refresh();
   }, []);
+
+  const customTypes = types.filter(t => !t.is_builtin);
+  const activeCustomCount = customTypes.filter(t => !t.locked_at).length;
+
+  // Reconciles locked custom types against the current plan's limit whenever
+  // the type list or the limit changes — same mechanism as ProfileManager's
+  // profile reconciliation; see entitlementLocks.ts and PAYWALL-SPEC §7. No
+  // "protected" item here (unlike profiles, there's no single custom type the
+  // user is necessarily "looking at" right now), so it just keeps whichever
+  // were already unlocked, in list order.
+  useEffect(() => {
+    if (customTypes.length === 0) return;
+    reconcileAndPersistParameterTypeLocks(customTypes, limits.maxCustomParams).then(({ toLock, toUnlock }) => {
+      if (toLock.length || toUnlock.length) refresh();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [types, limits.maxCustomParams]);
 
   const newFieldRow = (): FieldRowState => ({
     localId: `new-${newFieldCounter.current++}`,
@@ -73,7 +106,16 @@ export default function ParameterTypesScreen() {
   });
 
   const openAdd = () => {
-    setForm({ display_name: '', fields: [newFieldRow()] });
+    if (activeCustomCount >= limits.maxCustomParams) {
+      showUpgradePrompt(
+        navigation,
+        limits.maxCustomParams === 0
+          ? 'Custom parameter types need Pro or Premium.'
+          : `Your plan covers ${limits.maxCustomParams} custom parameter type${limits.maxCustomParams === 1 ? '' : 's'}. Upgrade to add another.`
+      );
+      return;
+    }
+    setForm({ display_name: '', fields: [newFieldRow()], profileScope: 'all', selectedProfileIds: [] });
     setModalOpen(true);
   };
 
@@ -91,9 +133,20 @@ export default function ParameterTypesScreen() {
         max: f.max !== undefined && f.max !== null ? String(f.max) : '',
         required: !!f.required,
         optionsText: (f.options ?? []).join(', ')
-      }))
+      })),
+      profileScope: 'all',
+      selectedProfileIds: []
     });
     setModalOpen(true);
+  };
+
+  const toggleSelectedProfile = (profileId: string) => {
+    setForm(f => ({
+      ...f,
+      selectedProfileIds: f.selectedProfileIds.includes(profileId)
+        ? f.selectedProfileIds.filter(id => id !== profileId)
+        : [...f.selectedProfileIds, profileId]
+    }));
   };
 
   const updateFieldRow = (idx: number, patch: Partial<FieldRowState>) => {
@@ -132,6 +185,11 @@ export default function ParameterTypesScreen() {
         return;
       }
     }
+    // Profile scope is only chosen at creation time (see FormState's comment).
+    if (!form.id && form.profileScope === 'selected' && profiles.length > 0 && form.selectedProfileIds.length === 0) {
+      Alert.alert('Select at least one profile', 'Choose which profiles get this parameter type, or switch to "All Profiles".');
+      return;
+    }
 
     const usedKeys: string[] = [];
     const field_definitions: FieldDefinition[] = form.fields.map(f => {
@@ -153,7 +211,11 @@ export default function ParameterTypesScreen() {
       if (form.id) {
         await updateParameterType({ id: form.id, display_name: name, is_builtin: 0, field_definitions });
       } else {
-        await insertParameterType({ display_name: name, field_definitions });
+        const created = await insertParameterType({ display_name: name, field_definitions });
+        if (profiles.length > 0) {
+          const targetProfileIds = form.profileScope === 'all' ? profiles.map(p => p.id) : form.selectedProfileIds;
+          await assignParameterTypeToProfiles(created.id, targetProfileIds);
+        }
       }
     } catch (e: any) {
       Alert.alert('Could not save', e?.message ?? 'Please try again.');
@@ -189,22 +251,27 @@ export default function ParameterTypesScreen() {
         data={types}
         keyExtractor={t => t.id}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        renderItem={({ item }) => (
-          <Card style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={typography.bodyBold}>{item.display_name}</Text>
-              <Text style={typography.caption}>
-                {item.is_builtin ? 'Built-in' : 'Custom'} · {item.field_definitions.length} field{item.field_definitions.length === 1 ? '' : 's'}
-              </Text>
-            </View>
-            {!item.is_builtin && (
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                <Button label="Edit" size="sm" variant="secondary" onPress={() => openEdit(item)} />
-                <Button label="Delete" size="sm" variant="destructive" onPress={() => remove(item)} />
+        renderItem={({ item }) => {
+          const isLocked = !item.is_builtin && !!item.locked_at;
+          return (
+            <Card style={[styles.row, isLocked && styles.rowLocked]}>
+              <View style={{ flex: 1 }}>
+                <Text style={typography.bodyBold}>{item.display_name}{isLocked ? '  🔒 Locked' : ''}</Text>
+                <Text style={typography.caption}>
+                  {isLocked
+                    ? "Over your plan's custom parameter limit — its readings are kept, just hidden from New Record until reactivated."
+                    : `${item.is_builtin ? 'Built-in' : 'Custom'} · ${item.field_definitions.length} field${item.field_definitions.length === 1 ? '' : 's'}`}
+                </Text>
               </View>
-            )}
-          </Card>
-        )}
+              {!item.is_builtin && !isLocked && (
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  <Button label="Edit" size="sm" variant="secondary" onPress={() => openEdit(item)} />
+                  <Button label="Delete" size="sm" variant="destructive" onPress={() => remove(item)} />
+                </View>
+              )}
+            </Card>
+          );
+        }}
         ListEmptyComponent={() => <EmptyState title="No parameter types yet" />}
       />
 
@@ -304,6 +371,40 @@ export default function ParameterTypesScreen() {
 
           <Button label="+ Add Field" variant="secondary" onPress={addField} style={{ marginTop: spacing.sm }} />
 
+          {!form.id && profiles.length > 0 && (
+            <>
+              <Text style={[typography.bodyBold, styles.label]}>Available to</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                {(['all', 'selected'] as ProfileScope[]).map(scope => (
+                  <TouchableOpacity
+                    key={scope}
+                    onPress={() => setForm(f => ({ ...f, profileScope: scope }))}
+                    style={[styles.chip, form.profileScope === scope && styles.chipActive]}
+                  >
+                    <Text style={{ color: form.profileScope === scope ? colors.primaryDark : colors.primary }}>
+                      {scope === 'all' ? 'All Profiles' : 'Selected Profiles'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {form.profileScope === 'selected' && (
+                <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' }}>
+                  {profiles.map(p => (
+                    <TouchableOpacity
+                      key={p.id}
+                      onPress={() => toggleSelectedProfile(p.id)}
+                      style={[styles.chip, form.selectedProfileIds.includes(p.id) && styles.chipActive]}
+                    >
+                      <Text style={{ color: form.selectedProfileIds.includes(p.id) ? colors.primaryDark : colors.primary }}>
+                        {p.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xl }}>
             <Button label="Cancel" variant="secondary" onPress={() => setModalOpen(false)} />
             <Button label="Save" onPress={save} />
@@ -316,6 +417,7 @@ export default function ParameterTypesScreen() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowLocked: { opacity: 0.6 },
   label: { marginTop: spacing.lg, marginBottom: spacing.xs },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.surface, marginTop: spacing.sm },
   fieldCard: { marginTop: spacing.sm },

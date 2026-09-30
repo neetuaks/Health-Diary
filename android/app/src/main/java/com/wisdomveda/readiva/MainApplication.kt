@@ -1,4 +1,4 @@
-package com.expo.HealthDiary
+package com.wisdomveda.readiva
 
 import android.app.Application
 import android.content.res.Configuration

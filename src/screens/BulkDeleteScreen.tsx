@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useProfile } from '../services/profileContext';
-import { fetchParameterTypes } from '../services/parameterRegistry';
+import { fetchParameterTypesForProfile } from '../services/profileParameterTypes';
 import { fetchReadingsMatchingFilter, deleteReadingsMatchingFilter, BulkDeleteFilter } from '../services/readingService';
 import { diaryColumnFields, startOfDay, endOfDay, startOfThisWeek, startOfThisMonth, startOfThisYear } from '../services/utils';
 import { ParameterType, Reading } from '../types';
@@ -53,8 +53,15 @@ export default function BulkDeleteScreen() {
   }, [activeProfile, selectedProfileId]);
 
   useEffect(() => {
-    fetchParameterTypes().then(setTypes);
-  }, []);
+    if (!selectedProfileId) { setTypes([]); return; }
+    fetchParameterTypesForProfile(selectedProfileId).then(ts => {
+      setTypes(ts);
+      // The picked profile (not just the active one) drives this list — switching
+      // it can invalidate a previously selected type, so fall back to "All Types"
+      // rather than keep filtering by a type this profile doesn't have.
+      setSelectedTypeId(prev => (prev && ts.some(t => t.id === prev) ? prev : null));
+    });
+  }, [selectedProfileId]);
 
   const refreshMatches = () => {
     if (!selectedProfileId) {

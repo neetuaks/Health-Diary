@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ViewStyle, TextStyle, StyleProp } from 'react-native';
 import { SafeAreaView, Edge } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { colors, spacing, radius, typography } from './tokens';
@@ -79,7 +79,7 @@ export function Button({
   );
 }
 
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
 

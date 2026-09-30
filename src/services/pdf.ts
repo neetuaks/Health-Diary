@@ -5,12 +5,13 @@ import {
   ageInMonthsFromDOB,
   fieldClassification,
   clinicalColorKey,
+  formatFieldValue,
   yAxisConfigFor,
   buildChartSeriesList,
   computeChartXDomain,
   RangeKey,
 } from './utils';
-import { fetchParameterTypes } from './parameterRegistry';
+import { fetchParameterTypesForProfile } from './profileParameterTypes';
 import { colors, chartSeriesColors } from '../theme/tokens';
 
 const CHART_SERIES_COLORS: readonly string[] = chartSeriesColors;
@@ -166,14 +167,35 @@ function renderChartSVG(typeDef: any, items: any[], range: RangeKey, ageInMonths
   return svg;
 }
 
-// Mirrors the on-screen table preview in ReportScreen — same registry-driven field
-// labels and clinical color-coding, rendered to HTML for expo-print instead of RN Views.
-// Returns the generated file's URI rather than sharing it directly — generating and
-// sharing are two separate user actions (see ReportScreen), so a share-step failure
-// (the OS share sheet, a flaky file provider) doesn't also wipe out a PDF that was
-// actually generated successfully.
-export async function generateReportPDF(profile: any, readings: any[], parameterFilter: string[] = [], range: RangeKey = '30'): Promise<string> {
-  const types = await fetchParameterTypes();
+// The shared report stylesheet — one profile's single report and the
+// consolidated multi-profile report (FAMILY-FEATURES-SPEC §2) both wrap their
+// body HTML in this, so page styling can't drift between the two.
+function wrapReportHTML(bodyHtml: string, extraCss = ''): string {
+  return `<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      body { font-family: -apple-system, Roboto, Helvetica, sans-serif; color: ${colors.text}; padding: 24px; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      .meta { color: ${colors.textMuted}; font-size: 12px; margin: 0 0 20px; }
+      h2 { font-size: 16px; margin: 28px 0 8px; }
+      table { border-collapse: collapse; width: 100%; font-size: 12px; }
+      th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid ${colors.border}; }
+      th { color: ${colors.textMuted}; text-transform: uppercase; font-size: 10px; letter-spacing: 0.03em; }
+      .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 8px; font-size: 11px; color: ${colors.textMuted}; }
+      .legend-item { display: inline-flex; align-items: center; gap: 4px; }
+      .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+      ${extraCss}
+    </style>
+  </head><body>${bodyHtml}</body></html>`;
+}
+
+// Builds one profile's section — name/age header, per-parameter chart + table —
+// as a bare HTML fragment (no <html>/<body> wrapper). This is the entire
+// content of a single-profile report (generateReportPDF just wraps and prints
+// it) and also what generateConsolidatedReportPDF concatenates one-per-profile
+// into a single document — per FAMILY-FEATURES-SPEC §2, "reuse the existing
+// single-report generation ... do not build a second reporting engine."
+async function buildProfileSectionHTML(profile: any, readings: any[], parameterFilter: string[], range: RangeKey): Promise<string> {
+  const types = await fetchParameterTypesForProfile(profile?.id ?? null);
 
   const grouped: Record<string, any[]> = {};
   readings.forEach(r => {
@@ -205,11 +227,7 @@ export async function generateReportPDF(profile: any, readings: any[], parameter
       const d = new Date(it.recorded_at);
       body += `<tr><td>${escapeHtml(d.toLocaleDateString())}</td><td>${escapeHtml(d.toLocaleTimeString())}</td>`;
       fields.forEach((f: any) => {
-        const val = it.vals[f.key];
-        const hasValue = val !== undefined && val !== '';
-        const display = hasValue
-          ? (f.dataType !== 'numeric' ? (f.optionShortLabels?.[val] ?? f.optionLabels?.[val] ?? String(val)) : String(val))
-          : '—';
+        const display = formatFieldValue(f, it.vals[f.key]);
         const cls = f.dataType === 'numeric' ? fieldClassification(ptypeId, f.key, it.vals, ageInMonths) : null;
         const cellColor = cls ? colors[clinicalColorKey(cls)] : null;
         const cellStyle = cellColor ? ` style="color:${cellColor};font-weight:700"` : '';
@@ -220,36 +238,68 @@ export async function generateReportPDF(profile: any, readings: any[], parameter
     body += `</tbody></table>`;
   }
 
-  const html = `<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-      body { font-family: -apple-system, Roboto, Helvetica, sans-serif; color: ${colors.text}; padding: 24px; }
-      h1 { font-size: 22px; margin: 0 0 4px; }
-      .meta { color: ${colors.textMuted}; font-size: 12px; margin: 0 0 20px; }
-      h2 { font-size: 16px; margin: 28px 0 8px; }
-      table { border-collapse: collapse; width: 100%; font-size: 12px; }
-      th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid ${colors.border}; }
-      th { color: ${colors.textMuted}; text-transform: uppercase; font-size: 10px; letter-spacing: 0.03em; }
-      .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 8px; font-size: 11px; color: ${colors.textMuted}; }
-      .legend-item { display: inline-flex; align-items: center; gap: 4px; }
-      .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    </style>
-  </head><body>${body}</body></html>`;
+  return body;
+}
 
-  // expo-print writes into its own internal output directory, which Expo Go's
-  // FileProvider doesn't expose to expo-sharing — sharing that uri directly fails
-  // with "Not allowed to read file under given URL". Copying that uri via
-  // FileSystem.copyAsync right after generation also failed ("pdf is not
-  // readable") — Android's print spooler apparently hasn't released the file yet
-  // when printToFileAsync resolves. Requesting base64 output instead sidesteps
-  // that race entirely: the base64 string is part of the same completed
-  // operation, not a second read of a file that may still be settling. Every
-  // other shareFile() call site (export, backup) writes straight into
-  // FileSystem.cacheDirectory, which is covered by the FileProvider, so write
-  // the decoded PDF there.
+// expo-print writes into its own internal output directory, which Expo Go's
+// FileProvider doesn't expose to expo-sharing — sharing that uri directly fails
+// with "Not allowed to read file under given URL". Copying that uri via
+// FileSystem.copyAsync right after generation also failed ("pdf is not
+// readable") — Android's print spooler apparently hasn't released the file yet
+// when printToFileAsync resolves. Requesting base64 output instead sidesteps
+// that race entirely: the base64 string is part of the same completed
+// operation, not a second read of a file that may still be settling. Every
+// other shareFile() call site (export, backup) writes straight into
+// FileSystem.cacheDirectory, which is covered by the FileProvider, so write
+// the decoded PDF there. Shared by every *PDF function below.
+async function printAndPersist(html: string, filename: string): Promise<string> {
   const { base64 } = await Print.printToFileAsync({ html, base64: true });
-  const destination = FileSystem.cacheDirectory + 'healthdiary_report.pdf';
+  const destination = FileSystem.cacheDirectory + filename;
   await FileSystem.writeAsStringAsync(destination, base64!, { encoding: FileSystem.EncodingType.Base64 });
   return destination;
+}
+
+// Mirrors the on-screen table preview in ReportScreen — same registry-driven field
+// labels and clinical color-coding, rendered to HTML for expo-print instead of RN Views.
+// Returns the generated file's URI rather than sharing it directly — generating and
+// sharing are two separate user actions (see ReportScreen), so a share-step failure
+// (the OS share sheet, a flaky file provider) doesn't also wipe out a PDF that was
+// actually generated successfully.
+export async function generateReportPDF(profile: any, readings: any[], parameterFilter: string[] = [], range: RangeKey = '30'): Promise<string> {
+  const body = await buildProfileSectionHTML(profile, readings, parameterFilter, range);
+  return printAndPersist(wrapReportHTML(body), 'healthdiary_report.pdf');
+}
+
+// One PDF covering several profiles (FAMILY-FEATURES-SPEC §2, Premium-only —
+// gated in ConsolidatedReportScreen, not here). Each entry gets the exact same
+// per-profile section as a single report (buildProfileSectionHTML), just
+// concatenated behind one cover header instead of each being its own file —
+// with a page break before every profile after the first so sections stay
+// visually distinct when printed/viewed.
+export async function generateConsolidatedReportPDF(
+  entries: { profile: any; readings: any[]; parameterFilter: string[] }[],
+  range: RangeKey = '30'
+): Promise<string> {
+  const allDates = entries.flatMap(e => e.readings.map(r => new Date(r.recorded_at).getTime()));
+  const rangeLabel = allDates.length
+    ? `${new Date(Math.min(...allDates)).toLocaleDateString()} – ${new Date(Math.max(...allDates)).toLocaleDateString()}`
+    : 'No readings in range';
+  const profileNames = entries.map(e => e.profile.name).join(', ');
+
+  let coverBody = `
+    <h1>Family Health Report</h1>
+    <p class="meta">${escapeHtml(rangeLabel)} &middot; Includes: ${escapeHtml(profileNames)} &middot; Generated ${escapeHtml(new Date().toLocaleString())}</p>
+  `;
+
+  let sections = '';
+  for (let i = 0; i < entries.length; i++) {
+    const { profile, readings, parameterFilter } = entries[i];
+    const sectionBody = await buildProfileSectionHTML(profile, readings, parameterFilter, range);
+    sections += `<div class="profile-section${i > 0 ? ' page-break' : ''}">${sectionBody}</div>`;
+  }
+
+  const html = wrapReportHTML(coverBody + sections, '.page-break { page-break-before: always; border-top: 2px solid ' + colors.border + '; padding-top: 16px; }');
+  return printAndPersist(html, 'healthdiary_family_report.pdf');
 }
 
 // A plain .txt export of the recovery key ran into the same class of problem
