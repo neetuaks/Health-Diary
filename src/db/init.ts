@@ -1,6 +1,5 @@
 import * as SQLite from 'expo-sqlite';
 import { seedParameterTypes } from './seed';
-import { backfillLegacyCustomParameterTypeScoping } from '../services/profileParameterTypes';
 
 const db = SQLite.openDatabaseSync('healthdiary.db');
 
@@ -76,6 +75,15 @@ export async function initDB() {
     addColumnIfMissing('parameter_types', 'locked_at TEXT');
 
     seedParameterTypes(db);
+    // Dynamic import, not a static one: profileParameterTypes.ts imports getDB from this
+    // file, so a static import here would be a require cycle. A cycle is order-dependent —
+    // whichever module Metro loads first can end up calling this function while the other
+    // module's own top-level consts (e.g. profileParameterTypes.ts's MIGRATION_FLAG_KEY)
+    // haven't been assigned yet, which is exactly how this broke before (SecureStore got
+    // called with an undefined key). Dynamic import always resolves on a later microtask,
+    // after the whole synchronous require graph has finished, so both modules are
+    // guaranteed fully initialized by the time this runs.
+    const { backfillLegacyCustomParameterTypeScoping } = await import('../services/profileParameterTypes');
     await backfillLegacyCustomParameterTypeScoping();
   } catch (err) {
     console.error('DB init error', err);
