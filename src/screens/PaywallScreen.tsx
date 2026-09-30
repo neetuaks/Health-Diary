@@ -9,10 +9,12 @@ import { colors, spacing, typography, radius } from '../theme/tokens';
 // Locked pricing (docs/PAYWALL-SPEC.md §2/§8) — shown whenever a live store
 // offering isn't available (e.g. under Expo Go, or before RevenueCat/store
 // products exist). A real device build prefers each package's own
-// product.priceString instead, so regional pricing stays correct.
+// product.priceString instead, so regional pricing stays correct. Bare
+// amounts only (no "/mo" or "/yr" suffix) — the surrounding JSX supplies the
+// period label so it isn't duplicated.
 const FALLBACK_PRICING: Record<'pro' | 'premium', { monthly: string; annual: string; perDay: string }> = {
-  pro: { monthly: '₹149/mo', annual: '₹1,490/yr', perDay: '≈ ₹5/day' },
-  premium: { monthly: '₹249/mo', annual: '₹2,490/yr', perDay: '≈ ₹8/day' },
+  pro: { monthly: '₹149', annual: '₹1,490', perDay: '≈ ₹5/day' },
+  premium: { monthly: '₹249', annual: '₹2,490', perDay: '≈ ₹8/day' },
 };
 
 const PRODUCT_ID_MAP: Record<'pro' | 'premium', { monthly: string; annual: string }> = {
