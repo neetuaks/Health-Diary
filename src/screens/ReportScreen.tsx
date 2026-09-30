@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import Svg, { Path, Polyline, Line } from 'react-native-svg';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useProfile } from '../services/profileContext';
 import { fetchReadingsForProfile } from '../services/readingService';
@@ -14,12 +15,19 @@ import { filterByRange, filterByHistoryWindow, RangeKey, ageFromDOB, ageInMonths
 import { Screen, Card, SegmentedControl, EmptyState, Banner } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
 
-// Material "download" glyph (down arrow into a tray) — PAYWALL-SPEC §6 is explicit
-// this is a download action, not a share one, so it gets a distinct icon from
-// ShareIcon rather than reusing it.
+// The standard "share/export" glyph (box open at the top with an arrow exiting
+// upward — the same shape Amazon, iOS, and most Android apps use). PAYWALL-SPEC
+// §6 still means this button downloads straight to the device rather than
+// opening the OS share sheet, but a plain "⬇" text glyph read as a duplicate of
+// the scroll-hint arrows below, so it's drawn as a real vector icon instead of
+// reusing an ambiguous Unicode arrow.
 function DownloadIcon({ size = 18, color = colors.primaryDark }: { size?: number; color?: string }) {
   return (
-    <Text style={{ fontSize: size, color, lineHeight: size + 2 }}>{'⬇'}</Text>
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <Polyline points="16 6 12 2 8 6" />
+      <Line x1="12" y1="2" x2="12" y2="15" />
+    </Svg>
   );
 }
 
