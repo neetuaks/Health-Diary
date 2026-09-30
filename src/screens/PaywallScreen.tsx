@@ -184,7 +184,7 @@ export default function PaywallScreen({ navigation }: any) {
         <View style={styles.featureList}>
           <FeatureRow text="1 profile" />
           <FeatureRow text="Last 7 days in-app" />
-          <FeatureRow text="No custom parameters" />
+          <FeatureRow text="Blood Pressure & Glucose tracking" />
         </View>
 
         {tier === 'free' && (
