@@ -206,7 +206,7 @@ export default function PaywallScreen({ navigation }: any) {
       <PlanCard
         tier="premium"
         badge="Most popular for families"
-        features={['10 profiles', 'Full family history', 'Blood Pressure & Glucose + up to 8 custom parameters', 'Family dashboard', 'Consolidated report']}
+        features={['10 profiles', 'Full family history', 'Blood Pressure & Glucose + up to 8 custom parameters', 'Download PDF reports', 'Family dashboard', 'Consolidated report']}
         offering={offering}
         currentTier={tier}
         onPurchase={handlePurchase}
