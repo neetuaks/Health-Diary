@@ -182,7 +182,8 @@ export default function PaywallScreen({ navigation }: any) {
         </View>
 
         <View style={styles.featureList}>
-          <FeatureRow text="1 profile · last 7 days in-app" />
+          <FeatureRow text="1 profile" />
+          <FeatureRow text="Last 7 days in-app" />
           <FeatureRow text="No custom parameters" />
         </View>
 
@@ -195,7 +196,7 @@ export default function PaywallScreen({ navigation }: any) {
 
       <PlanCard
         tier="pro"
-        features={['My full record, over time', '2 profiles · full history · up to 4 custom parameters', 'Download PDF reports']}
+        features={['2 profiles', 'Full history', 'Up to 4 custom parameters', 'Download PDF reports']}
         offering={offering}
         currentTier={tier}
         onPurchase={handlePurchase}
@@ -205,7 +206,7 @@ export default function PaywallScreen({ navigation }: any) {
       <PlanCard
         tier="premium"
         badge="Most popular for families"
-        features={['My family, together', '10 profiles · up to 8 custom parameters', 'Family dashboard + consolidated report', 'Priority support']}
+        features={['10 profiles', 'Up to 8 custom parameters', 'Family dashboard', 'Consolidated report', 'Priority support']}
         offering={offering}
         currentTier={tier}
         onPurchase={handlePurchase}
