@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, Linking, Platform, StyleSheet } from 'react-native';
+import Constants from 'expo-constants';
 import { useEntitlement } from '../services/entitlement';
 import { getOfferings, purchasePackage, restorePurchases, PurchasesOffering, PurchasesPackageInfo } from '../services/purchases';
 import { Tier, TIER_DISPLAY_NAME } from '../services/limits';
@@ -157,9 +158,13 @@ export default function PaywallScreen({ navigation }: any) {
   };
 
   const handleManageSubscription = () => {
+    // Android/iOS policy requires subscription cancellation/management to happen in the
+    // store, not in-app — this deep link is the correct behavior, not a fallback. Scoped
+    // to this app's package (rather than the account-wide subscriptions list) so it lands
+    // directly on Health Diary's subscription instead of every subscription on the account.
     const url = Platform.OS === 'ios'
       ? 'itms-apps://apps.apple.com/account/subscriptions'
-      : 'https://play.google.com/store/account/subscriptions';
+      : `https://play.google.com/store/account/subscriptions?package=${Constants.expoConfig?.android?.package ?? 'com.expo.HealthDiary'}`;
     Linking.openURL(url).catch(() => Alert.alert('Could not open', 'Please manage your subscription from the store app directly.'));
   };
 
