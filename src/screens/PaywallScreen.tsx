@@ -196,7 +196,7 @@ export default function PaywallScreen({ navigation }: any) {
 
       <PlanCard
         tier="pro"
-        features={['2 profiles', 'Full history', 'Up to 4 custom parameters', 'Download PDF reports']}
+        features={['2 profiles', 'Full history', 'Blood Pressure & Glucose + up to 4 custom parameters', 'Download PDF reports']}
         offering={offering}
         currentTier={tier}
         onPurchase={handlePurchase}
@@ -206,7 +206,7 @@ export default function PaywallScreen({ navigation }: any) {
       <PlanCard
         tier="premium"
         badge="Most popular for families"
-        features={['10 profiles', 'Up to 8 custom parameters', 'Full family history', 'Family dashboard', 'Consolidated report']}
+        features={['10 profiles', 'Blood Pressure & Glucose + up to 8 custom parameters', 'Full family history', 'Family dashboard', 'Consolidated report']}
         offering={offering}
         currentTier={tier}
         onPurchase={handlePurchase}
