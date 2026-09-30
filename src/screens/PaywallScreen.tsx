@@ -24,6 +24,21 @@ function findPackage(offering: PurchasesOffering | null, productId: string): Pur
   return offering?.availablePackages.find(p => p.product.identifier === productId);
 }
 
+function FeatureRow({ text }: { text: string }) {
+  return (
+    <View style={styles.featureRow}>
+      <Text style={styles.featureCheck}>{'✓'}</Text>
+      <Text style={[typography.body, { flex: 1 }]}>{text}</Text>
+    </View>
+  );
+}
+
+// Standard subscription-card layout (App Store / Play Store convention): the
+// monthly price is the big, immediate number since that's what most people
+// scan for first; the annual price is a small secondary line underneath
+// (framed as the savings option), then the feature list, then the CTA —
+// not price buried under a bullet list, which is how this screen used to
+// read.
 function PlanCard({
   tier,
   badge,
@@ -53,19 +68,20 @@ function PlanCard({
         </View>
       )}
       <Text style={typography.h2}>{TIER_DISPLAY_NAME[tier]}</Text>
-      {features.map(f => (
-        <Text key={f} style={[typography.body, { marginTop: spacing.xs }]}>{'• ' + f}</Text>
-      ))}
 
-      <View style={styles.priceRow}>
-        <View>
-          <Text style={typography.numberLarge}>{annualPkg?.product.priceString ?? FALLBACK_PRICING[tier].annual}</Text>
-          <Text style={typography.caption}>per year · {FALLBACK_PRICING[tier].perDay}</Text>
+      <View style={styles.priceBlock}>
+        <View style={styles.priceRow}>
+          <Text style={typography.numberLarge}>{monthlyPkg?.product.priceString ?? FALLBACK_PRICING[tier].monthly}</Text>
+          <Text style={styles.pricePeriod}>/month</Text>
         </View>
+        <Text style={styles.annualNote}>
+          or {annualPkg?.product.priceString ?? FALLBACK_PRICING[tier].annual}/year ({FALLBACK_PRICING[tier].perDay})
+        </Text>
       </View>
-      <Text style={[typography.caption, { marginTop: spacing.xs }]}>
-        or {monthlyPkg?.product.priceString ?? FALLBACK_PRICING[tier].monthly} billed monthly
-      </Text>
+
+      <View style={styles.featureList}>
+        {features.map(f => <FeatureRow key={f} text={f} />)}
+      </View>
 
       {isCurrent ? (
         <View style={[styles.button, styles.currentPlanButton]}>
@@ -74,18 +90,18 @@ function PlanCard({
       ) : (
         <>
           <Button
-            label={`Get ${TIER_DISPLAY_NAME[tier]} — Annual`}
-            disabled={purchasing}
-            onPress={() => onPurchase(annualPkg ?? null, tier, 'annual')}
-            style={{ marginTop: spacing.md }}
-          />
-          <Button
-            label="Monthly instead"
-            variant="secondary"
+            label={`Get ${TIER_DISPLAY_NAME[tier]}`}
             disabled={purchasing}
             onPress={() => onPurchase(monthlyPkg ?? null, tier, 'monthly')}
-            style={{ marginTop: spacing.sm }}
+            style={{ marginTop: spacing.md }}
           />
+          <TouchableOpacity
+            disabled={purchasing}
+            onPress={() => onPurchase(annualPkg ?? null, tier, 'annual')}
+            style={{ marginTop: spacing.sm, alignItems: 'center' }}
+          >
+            <Text style={{ color: colors.primary, fontWeight: '600' }}>Switch to annual & save</Text>
+          </TouchableOpacity>
         </>
       )}
     </Card>
@@ -154,8 +170,20 @@ export default function PaywallScreen({ navigation }: any) {
 
       <Card style={[styles.planCard, { marginTop: spacing.lg }]}>
         <Text style={typography.h2}>Free</Text>
-        <Text style={[typography.body, { marginTop: spacing.xs }]}>{'• Just me, this week'}</Text>
-        <Text style={[typography.body, { marginTop: spacing.xs }]}>{'• 1 profile · last 7 days in-app · no custom parameters'}</Text>
+
+        <View style={styles.priceBlock}>
+          <View style={styles.priceRow}>
+            <Text style={typography.numberLarge}>₹0</Text>
+            <Text style={styles.pricePeriod}>/month</Text>
+          </View>
+          <Text style={styles.annualNote}>forever — no card needed</Text>
+        </View>
+
+        <View style={styles.featureList}>
+          <FeatureRow text="1 profile · last 7 days in-app" />
+          <FeatureRow text="No custom parameters" />
+        </View>
+
         {tier === 'free' && (
           <View style={[styles.button, styles.currentPlanButton, { marginTop: spacing.md }]}>
             <Text style={{ color: colors.textMuted, fontWeight: '600' }}>Your current plan</Text>
@@ -203,7 +231,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4, paddingHorizontal: spacing.sm,
   },
   badgeText: { color: colors.textOnPrimary, fontSize: 11, fontWeight: '700' },
-  priceRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: spacing.md },
+  priceBlock: { marginTop: spacing.md },
+  priceRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  pricePeriod: { ...typography.body, color: colors.textMuted, marginLeft: 4, marginBottom: 4 },
+  annualNote: { ...typography.caption, marginTop: 2 },
+  featureList: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },
+  featureRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.xs, gap: spacing.xs },
+  featureCheck: { color: colors.success, fontWeight: '700', width: 18 },
   button: { paddingVertical: spacing.md, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   currentPlanButton: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
 });
