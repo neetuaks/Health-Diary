@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Alert, Linking, Platform, Sty
 import Constants from 'expo-constants';
 import { useEntitlement } from '../services/entitlement';
 import { getOfferings, purchasePackage, restorePurchases, PurchasesOffering, PurchasesPackageInfo } from '../services/purchases';
-import { Tier, TIER_DISPLAY_NAME } from '../services/limits';
+import { LIMITS, Tier, TIER_DISPLAY_NAME } from '../services/limits';
 import { Screen, Card, Button } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
 
@@ -27,25 +27,15 @@ function findPackage(offering: PurchasesOffering | null, productId: string): Pur
   return offering?.availablePackages.find(p => p.product.identifier === productId);
 }
 
-function FeatureRow({ text }: { text: string }) {
-  return (
-    <View style={styles.featureRow}>
-      <Text style={styles.featureCheck}>{'✓'}</Text>
-      <Text style={[typography.body, { flex: 1 }]}>{text}</Text>
-    </View>
-  );
-}
-
 // Standard subscription-card layout (App Store / Play Store convention): the
 // monthly price is the big, immediate number since that's what most people
 // scan for first; the annual price is a small secondary line underneath
-// (framed as the savings option), then the feature list, then the CTA —
-// not price buried under a bullet list, which is how this screen used to
-// read.
+// (framed as the savings option), then the CTA. The feature-by-feature
+// breakdown lives in the shared ComparisonTable below all three cards, not
+// duplicated as a bullet list per card.
 function PlanCard({
   tier,
   badge,
-  features,
   offering,
   currentTier,
   onPurchase,
@@ -53,7 +43,6 @@ function PlanCard({
 }: {
   tier: 'pro' | 'premium';
   badge?: string;
-  features: string[];
   offering: PurchasesOffering | null;
   currentTier: Tier;
   onPurchase: (pkg: PurchasesPackageInfo | null, tier: 'pro' | 'premium', period: 'monthly' | 'annual') => void;
@@ -82,10 +71,6 @@ function PlanCard({
         </Text>
       </View>
 
-      <View style={styles.featureList}>
-        {features.map(f => <FeatureRow key={f} text={f} />)}
-      </View>
-
       {isCurrent ? (
         <View style={[styles.button, styles.currentPlanButton]}>
           <Text style={{ color: colors.textMuted, fontWeight: '600' }}>Your current plan</Text>
@@ -107,6 +92,62 @@ function PlanCard({
           </TouchableOpacity>
         </>
       )}
+    </Card>
+  );
+}
+
+type CellValue = boolean | string;
+
+function windowLabel(days: number | null): string {
+  return days === null ? 'Full' : `${days} days`;
+}
+
+function ComparisonCell({ value }: { value: CellValue }) {
+  if (value === true) return <Text style={[styles.cellText, styles.tick]}>{'✓'}</Text>;
+  if (value === false) return <Text style={[styles.cellText, styles.cross]}>{'✗'}</Text>;
+  return <Text style={styles.cellText}>{value}</Text>;
+}
+
+// Mirrors docs/PAYWALL-SPEC.md §2's tier matrix as a feature-by-feature
+// comparison (rows = features, columns = plans) rather than a bullet list
+// repeated inside each plan card — that's the layout that actually fits all
+// three plans on a phone screen without cramping. Values come from LIMITS,
+// not re-typed numbers, per the spec's "one config, never hard-coded at call
+// sites" rule; only the two universal-on-every-tier rows (built-ins, backup)
+// are hardcoded true, since they aren't represented in LIMITS at all.
+function ComparisonTable() {
+  const rows: { label: string; free: CellValue; pro: CellValue; premium: CellValue }[] = [
+    { label: 'Blood Pressure & Glucose', free: true, pro: true, premium: true },
+    { label: 'Custom parameter types', free: String(LIMITS.free.maxCustomParams), pro: String(LIMITS.pro.maxCustomParams), premium: String(LIMITS.premium.maxCustomParams) },
+    { label: 'Max profiles', free: String(LIMITS.free.maxProfiles), pro: String(LIMITS.pro.maxProfiles), premium: String(LIMITS.premium.maxProfiles) },
+    { label: 'In-app history', free: windowLabel(LIMITS.free.historyWindowDays), pro: windowLabel(LIMITS.pro.historyWindowDays), premium: windowLabel(LIMITS.premium.historyWindowDays) },
+    { label: 'CSV / JSON export', free: windowLabel(LIMITS.free.exportWindowDays), pro: windowLabel(LIMITS.pro.exportWindowDays), premium: windowLabel(LIMITS.premium.exportWindowDays) },
+    { label: 'Encrypted Backup & Restore', free: true, pro: true, premium: true },
+    { label: 'Download PDF report', free: LIMITS.free.canGeneratePdf, pro: LIMITS.pro.canGeneratePdf, premium: LIMITS.premium.canGeneratePdf },
+    { label: 'Consolidated family report', free: LIMITS.free.consolidatedReport, pro: LIMITS.pro.consolidatedReport, premium: LIMITS.premium.consolidatedReport },
+    { label: 'Family dashboard', free: LIMITS.free.familyDashboard, pro: LIMITS.pro.familyDashboard, premium: LIMITS.premium.familyDashboard },
+  ];
+
+  return (
+    <Card style={{ marginTop: spacing.lg, padding: 0 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View>
+          <View style={[styles.tableRow, styles.tableHeaderRow]}>
+            <Text style={[styles.labelCell, styles.tableHeaderText]}>Feature</Text>
+            <Text style={[styles.valueCell, styles.tableHeaderText]}>Free</Text>
+            <Text style={[styles.valueCell, styles.tableHeaderText]}>Pro</Text>
+            <Text style={[styles.valueCell, styles.tableHeaderText]}>Premium</Text>
+          </View>
+          {rows.map((r, i) => (
+            <View key={r.label} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
+              <Text style={styles.labelCell}>{r.label}</Text>
+              <View style={styles.valueCell}><ComparisonCell value={r.free} /></View>
+              <View style={styles.valueCell}><ComparisonCell value={r.pro} /></View>
+              <View style={styles.valueCell}><ComparisonCell value={r.premium} /></View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </Card>
   );
 }
@@ -186,12 +227,6 @@ export default function PaywallScreen({ navigation }: any) {
           <Text style={styles.annualNote}>forever — no card needed</Text>
         </View>
 
-        <View style={styles.featureList}>
-          <FeatureRow text="1 profile" />
-          <FeatureRow text="Last 7 days in-app" />
-          <FeatureRow text="Blood Pressure & Glucose tracking" />
-        </View>
-
         {tier === 'free' && (
           <View style={[styles.button, styles.currentPlanButton, { marginTop: spacing.md }]}>
             <Text style={{ color: colors.textMuted, fontWeight: '600' }}>Your current plan</Text>
@@ -201,7 +236,6 @@ export default function PaywallScreen({ navigation }: any) {
 
       <PlanCard
         tier="pro"
-        features={['2 profiles', 'Full history', 'Blood Pressure & Glucose + up to 4 custom parameters', 'Download PDF reports']}
         offering={offering}
         currentTier={tier}
         onPurchase={handlePurchase}
@@ -211,12 +245,13 @@ export default function PaywallScreen({ navigation }: any) {
       <PlanCard
         tier="premium"
         badge="Most popular for families"
-        features={['10 profiles', 'Full family history', 'Blood Pressure & Glucose + up to 8 custom parameters', 'Download PDF reports', 'Family dashboard', 'Consolidated report']}
         offering={offering}
         currentTier={tier}
         onPurchase={handlePurchase}
         purchasing={purchasing}
       />
+
+      <ComparisonTable />
 
       <TouchableOpacity onPress={handleRestore} disabled={restoring} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
         <Text style={{ color: colors.primary, fontWeight: '600' }}>{restoring ? 'Restoring…' : 'Restore Purchases'}</Text>
@@ -243,9 +278,15 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: 'row', alignItems: 'flex-end' },
   pricePeriod: { ...typography.body, color: colors.textMuted, marginLeft: 4, marginBottom: 4 },
   annualNote: { ...typography.caption, marginTop: 2 },
-  featureList: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },
-  featureRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.xs, gap: spacing.xs },
-  featureCheck: { color: colors.success, fontWeight: '700', width: 18 },
   button: { paddingVertical: spacing.md, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   currentPlanButton: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  tableHeaderRow: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  tableHeaderText: { fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase' as any },
+  tableRowAlt: { backgroundColor: colors.background },
+  labelCell: { width: 170, fontSize: 13, color: colors.text },
+  valueCell: { width: 64, alignItems: 'center' },
+  cellText: { fontSize: 13, color: colors.text, textAlign: 'center' },
+  tick: { color: colors.success, fontWeight: '700', fontSize: 16 },
+  cross: { color: colors.textMuted, fontWeight: '700', fontSize: 16 },
 });
