@@ -331,7 +331,7 @@ export async function generateRecoveryKeyPDF(recoveryKey: string): Promise<strin
     <h1>${APP_NAME} — Recovery Key</h1>
     <p class="meta">Generated ${escapeHtml(new Date().toLocaleString())}</p>
     <div class="key">${escapeHtml(recoveryKey)}</div>
-    <p class="warning">Keep this somewhere safe and private. It's required to restore your encrypted backup on another device, and it can't be recovered if lost.</p>
+    <p class="warning">Keep this key somewhere safe and private, away from this phone, and keep your backup file outside the phone too. It is the only way to open your encrypted backup on a new phone. We cannot reset or recover it.</p>
   </body></html>`;
 
   const { base64 } = await Print.printToFileAsync({ html, base64: true });

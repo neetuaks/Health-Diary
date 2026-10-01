@@ -11,7 +11,8 @@ import { openLegalUrl, LEGAL_URLS } from '../src/config/legal';
 
 const { Linking, Alert } = require('react-native');
 
-const FRIENDLY_ALERT = "Couldn't open the page. Please check your internet connection and try again.";
+const FRIENDLY_ALERT_TITLE = "Couldn't open the page";
+const FRIENDLY_ALERT_MESSAGE = 'Please check your internet connection and try again.';
 
 describe('openLegalUrl (CLAUDE-CODE-PROMPT-legal-links.md §1)', () => {
   beforeEach(() => {
@@ -37,7 +38,7 @@ describe('openLegalUrl (CLAUDE-CODE-PROMPT-legal-links.md §1)', () => {
     await openLegalUrl('terms');
 
     expect(Linking.openURL).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(FRIENDLY_ALERT);
+    expect(Alert.alert).toHaveBeenCalledWith(FRIENDLY_ALERT_TITLE, FRIENDLY_ALERT_MESSAGE);
   });
 
   test('shows the friendly alert when openURL itself rejects (e.g. no network)', async () => {
@@ -46,6 +47,6 @@ describe('openLegalUrl (CLAUDE-CODE-PROMPT-legal-links.md §1)', () => {
 
     await openLegalUrl('support');
 
-    expect(Alert.alert).toHaveBeenCalledWith(FRIENDLY_ALERT);
+    expect(Alert.alert).toHaveBeenCalledWith(FRIENDLY_ALERT_TITLE, FRIENDLY_ALERT_MESSAGE);
   });
 });

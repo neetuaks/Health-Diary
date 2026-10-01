@@ -31,6 +31,6 @@ export async function openLegalUrl(key: LegalUrlKey): Promise<void> {
     if (!supported) throw new Error('URL not openable');
     await Linking.openURL(url);
   } catch {
-    Alert.alert("Couldn't open the page. Please check your internet connection and try again.");
+    Alert.alert("Couldn't open the page", 'Please check your internet connection and try again.');
   }
 }

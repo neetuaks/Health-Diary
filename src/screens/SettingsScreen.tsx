@@ -25,7 +25,7 @@ export default function SettingsScreen({ navigation }: any) {
 
   const openSupportEmail = () => {
     Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() =>
-      Alert.alert("Couldn't open the page. Please check your internet connection and try again.")
+      Alert.alert("Couldn't open the page", 'Please check your internet connection and try again.')
     );
   };
 
@@ -142,8 +142,8 @@ export default function SettingsScreen({ navigation }: any) {
         <ListButton label="Privacy Policy" onPress={() => openLegalUrl('privacy')} style={divider} />
         <ListButton label="Terms of Service" onPress={() => openLegalUrl('terms')} style={divider} />
         <ListButton label="Medical Disclaimer" onPress={() => openLegalUrl('disclaimer')} style={divider} />
-        <ListButton label="Support" subtitle={SUPPORT_EMAIL} onPress={openSupportEmail} style={divider} />
-        <View style={{ paddingVertical: spacing.sm }}>
+        <ListButton label="Support" subtitle={SUPPORT_EMAIL} onPress={openSupportEmail} />
+        <View style={[{ paddingBottom: spacing.sm }, divider]}>
           <TouchableOpacity onPress={() => openLegalUrl('support')} accessibilityRole="link" accessibilityLabel="Visit support page">
             <Text style={[typography.caption, { color: colors.primary, fontWeight: '600' }]}>Visit support page</Text>
           </TouchableOpacity>
