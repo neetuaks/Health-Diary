@@ -12,6 +12,7 @@ import { persistAndRecordPdf } from '../services/pdfHistory';
 import { downloadPdfToDevice } from '../services/pdfDownload';
 import ReadingsChart from '../components/ReadingsChart';
 import { filterByRange, filterByHistoryWindow, RangeKey, ageFromDOB, ageInMonthsFromDOB, fieldClassification, clinicalColorKey, formatFieldValue } from '../services/utils';
+import { DISCLAIMER_REPORT_FOOTER } from '../config/legal';
 import { Screen, Card, SegmentedControl, EmptyState, Banner } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
 
@@ -244,6 +245,8 @@ export default function ReportScreen() {
               </Card>
             </>
           )}
+
+          <Text style={[typography.caption, styles.reportFooter]}>{DISCLAIMER_REPORT_FOOTER}</Text>
         </ScrollView>
         {showScrollUpHint && (
           <TouchableOpacity
@@ -272,6 +275,7 @@ export default function ReportScreen() {
 
 const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  reportFooter: { textAlign: 'center', marginTop: spacing.xl },
   shareButton: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.primaryMuted, alignItems: 'center', justifyContent: 'center' },
   shareButtonDisabled: { opacity: 0.5 },
   tableRow: { flexDirection: 'row', paddingVertical: spacing.sm },

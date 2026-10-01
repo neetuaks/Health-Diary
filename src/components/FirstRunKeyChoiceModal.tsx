@@ -5,21 +5,25 @@ import { restoreEncryptedBackupFromFile } from '../services/backup';
 import { pickAndReadBackupFile } from '../services/pickAndReadBackupFile';
 import { setOnboardingChoice } from '../services/onboarding';
 import { useProfile } from '../services/profileContext';
+import { APP_NAME, DISCLAIMER_SHORT_FIRST_LAUNCH } from '../config/legal';
+import { LegalLinks } from './LegalLinks';
 import { Screen, Button } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
 
 // Shown once, the first time a device with zero profiles reaches Profiles —
-// asks whether this is a brand-new user (no key yet, generated later from
+// opens on a welcome/disclaimer step (docs/CLAUDE-CODE-PROMPT-legal-links.md §4;
+// reuses this same once-only flow rather than a second onboarding screen/flag),
+// then asks whether this is a brand-new user (no key yet, generated later from
 // Backup & Restore) or a returning user who already has a Recovery Key from a
 // previous device/install (entered here, since there's no local backup on
 // this device yet for automatic restore to find).
 export default function FirstRunKeyChoiceModal({ visible, onDone }: { visible: boolean; onDone: () => void }) {
   const { reloadProfiles } = useProfile();
-  const [step, setStep] = useState<'choice' | 'enterKey'>('choice');
+  const [step, setStep] = useState<'welcome' | 'choice' | 'enterKey'>('welcome');
   const [keyInput, setKeyInput] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const reset = () => { setStep('choice'); setKeyInput(''); };
+  const reset = () => { setStep('welcome'); setKeyInput(''); };
 
   const chooseNew = async () => {
     // "I'm new" usually means there's nothing on this device yet, but a
@@ -103,13 +107,26 @@ export default function FirstRunKeyChoiceModal({ visible, onDone }: { visible: b
   return (
     <Modal visible={visible} animationType="slide">
       <Screen scroll>
-        {step === 'choice' ? (
+        {step === 'welcome' ? (
           <>
-            <Text style={typography.h1}>Welcome to Health Diary</Text>
-            <Text style={[typography.body, { marginTop: spacing.md }]}>
-              Have you used Health Diary before, or is this your first time setting it up?
+            <Text style={typography.h1}>Welcome to {APP_NAME}</Text>
+            <Text style={[typography.body, { marginTop: spacing.lg }]}>
+              Your readings stay on this phone. We can't see them or recover them.
             </Text>
-            <Button label="I'm new to Health Diary" onPress={chooseNew} style={{ marginTop: spacing.xl }} />
+            <Text style={[typography.body, { marginTop: spacing.md }]}>
+              Make a backup now and then. It is free on every plan.
+            </Text>
+            <Text style={[typography.caption, { marginTop: spacing.lg }]}>{DISCLAIMER_SHORT_FIRST_LAUNCH}</Text>
+            <LegalLinks links={['terms', 'privacy']} variant="row" />
+            <Button label="Continue" onPress={() => setStep('choice')} style={{ marginTop: spacing.xl }} />
+          </>
+        ) : step === 'choice' ? (
+          <>
+            <Text style={typography.h1}>Welcome to {APP_NAME}</Text>
+            <Text style={[typography.body, { marginTop: spacing.md }]}>
+              Have you used {APP_NAME} before, or is this your first time setting it up?
+            </Text>
+            <Button label={`I'm new to ${APP_NAME}`} onPress={chooseNew} style={{ marginTop: spacing.xl }} />
             <Button label="I already have a Recovery Key" variant="secondary" onPress={chooseExisting} style={{ marginTop: spacing.md }} />
           </>
         ) : (

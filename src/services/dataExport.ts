@@ -2,6 +2,7 @@ import { getDB } from '../db/init';
 import * as FileSystem from 'expo-file-system/legacy';
 import { shareFile } from './share';
 import { filterByHistoryWindow } from './utils';
+import { APP_NAME } from '../config/legal';
 
 // `exportWindowDays` is the caller's current tier limit (PAYWALL-SPEC §2/§4.4)
 // — null on Pro/Premium (full history), 7 on Free. Older rows are excluded
@@ -17,7 +18,7 @@ export async function exportAllAsJSON(exportWindowDays: number | null = null) {
   const payload = { profiles, parameter_types: pts, readings };
   const path = FileSystem.cacheDirectory + 'healthdiary_export.json';
   await FileSystem.writeAsStringAsync(path, JSON.stringify(payload, null, 2), { encoding: FileSystem.EncodingType.UTF8 });
-  await shareFile(path, 'Health Diary Export (JSON)', 'application/json');
+  await shareFile(path, `${APP_NAME} Export (JSON)`, 'application/json');
 }
 
 export async function exportAllAsCSV(exportWindowDays: number | null = null) {
@@ -31,5 +32,5 @@ export async function exportAllAsCSV(exportWindowDays: number | null = null) {
   const csv = header.concat(lines).join('\n');
   const path = FileSystem.cacheDirectory + 'healthdiary_export.csv';
   await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
-  await shareFile(path, 'Health Diary Export (CSV)', 'text/csv');
+  await shareFile(path, `${APP_NAME} Export (CSV)`, 'text/csv');
 }

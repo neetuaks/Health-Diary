@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as MailComposer from 'expo-mail-composer';
 import { shareFile } from './share';
+import { APP_NAME } from '../config/legal';
 
 const LOG_PATH = FileSystem.documentDirectory + 'healthdiary_logs.txt';
 
@@ -28,13 +29,13 @@ export async function emailDiagnostics() {
 
     const available = await MailComposer.isAvailableAsync();
     if (!available) {
-      await shareFile(LOG_PATH, 'Health Diary Diagnostics', 'text/plain');
+      await shareFile(LOG_PATH, `${APP_NAME} Diagnostics`, 'text/plain');
       return;
     }
 
     await MailComposer.composeAsync({
       recipients: SUPPORT_EMAIL ? [SUPPORT_EMAIL] : [],
-      subject: 'Health Diary — Problem Report',
+      subject: `${APP_NAME} — Problem Report`,
       body:
         'Describe what happened below.\n\n' +
         '---\n' +

@@ -12,6 +12,7 @@ import {
   RangeKey,
 } from './utils';
 import { fetchParameterTypesForProfile } from './profileParameterTypes';
+import { APP_NAME, DISCLAIMER_REPORT_FOOTER } from '../config/legal';
 import { colors, chartSeriesColors } from '../theme/tokens';
 
 const CHART_SERIES_COLORS: readonly string[] = chartSeriesColors;
@@ -169,11 +170,14 @@ function renderChartSVG(typeDef: any, items: any[], range: RangeKey, ageInMonths
 
 // The shared report stylesheet — one profile's single report and the
 // consolidated multi-profile report (FAMILY-FEATURES-SPEC §2) both wrap their
-// body HTML in this, so page styling can't drift between the two.
+// body HTML in this, so page styling can't drift between the two. Also where
+// the legal disclaimer footer (CLAUDE-CODE-PROMPT-legal-links.md §5) gets
+// added, so every report generated through this file carries it automatically
+// instead of each generator function remembering to add it itself.
 function wrapReportHTML(bodyHtml: string, extraCss = ''): string {
   return `<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-      body { font-family: -apple-system, Roboto, Helvetica, sans-serif; color: ${colors.text}; padding: 24px; }
+      body { font-family: -apple-system, Roboto, Helvetica, sans-serif; color: ${colors.text}; padding: 24px 24px 48px; }
       h1 { font-size: 22px; margin: 0 0 4px; }
       .meta { color: ${colors.textMuted}; font-size: 12px; margin: 0 0 20px; }
       h2 { font-size: 16px; margin: 28px 0 8px; }
@@ -183,9 +187,14 @@ function wrapReportHTML(bodyHtml: string, extraCss = ''): string {
       .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 8px; font-size: 11px; color: ${colors.textMuted}; }
       .legend-item { display: inline-flex; align-items: center; gap: 4px; }
       .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+      /* position:fixed repeats this on every page in Chromium-based print-to-PDF
+         (what expo-print uses on both platforms); if a given renderer doesn't
+         honor that, it still ends up once at the end of the document, which is
+         the explicitly-allowed fallback. */
+      .report-footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 9px; color: ${colors.textMuted}; padding: 6px 24px; }
       ${extraCss}
     </style>
-  </head><body>${bodyHtml}</body></html>`;
+  </head><body>${bodyHtml}<div class="report-footer">${escapeHtml(DISCLAIMER_REPORT_FOOTER)}</div></body></html>`;
 }
 
 // Builds one profile's section — name/age header, per-parameter chart + table —
@@ -319,7 +328,7 @@ export async function generateRecoveryKeyPDF(recoveryKey: string): Promise<strin
       .warning { margin-top: 24px; font-size: 13px; color: ${colors.text}; }
     </style>
   </head><body>
-    <h1>Health Diary — Recovery Key</h1>
+    <h1>${APP_NAME} — Recovery Key</h1>
     <p class="meta">Generated ${escapeHtml(new Date().toLocaleString())}</p>
     <div class="key">${escapeHtml(recoveryKey)}</div>
     <p class="warning">Keep this somewhere safe and private. It's required to restore your encrypted backup on another device, and it can't be recovered if lost.</p>

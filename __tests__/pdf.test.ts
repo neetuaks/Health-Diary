@@ -37,6 +37,8 @@ describe('generateReportPDF', () => {
     expect(html).toMatch(/\(\d+ years old\)/);
     expect(html).toContain('Systolic');
     expect(html).toContain('>120<');
+    // CLAUDE-CODE-PROMPT-legal-links.md §5: every report carries the disclaimer footer.
+    expect(html).toContain('For personal record-keeping only. Not medical advice.');
   });
 
   test('parameterFilter excludes non-matching readings', async () => {
