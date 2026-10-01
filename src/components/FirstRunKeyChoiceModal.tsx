@@ -114,7 +114,7 @@ export default function FirstRunKeyChoiceModal({ visible, onDone }: { visible: b
               Your readings stay on this phone. We can't see them or recover them.
             </Text>
             <Text style={[typography.body, { marginTop: spacing.md }]}>
-              Make a backup now and then. It is free on every plan.
+              Make a backup now and then, and save the backup file and your Recovery Key somewhere outside this phone. Backup is free on every plan.
             </Text>
             <Text style={[typography.caption, { marginTop: spacing.lg }]}>{DISCLAIMER_SHORT_FIRST_LAUNCH}</Text>
             <LegalLinks links={['terms', 'privacy']} variant="row" />

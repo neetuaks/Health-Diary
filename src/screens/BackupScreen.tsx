@@ -226,7 +226,7 @@ export default function BackupScreen() {
               <Button label="Share Key" variant="secondary" onPress={handleShareKey} />
               <Button label="I've saved my key" onPress={handleConfirmSaved} />
             </View>
-            <Banner variant="warning" message="Save this key now — it can't be recovered later. You need it to restore your data on another device." />
+            <Banner variant="warning" message="This key is the only way to open your backup on a new phone. We can't reset it. Save it somewhere safe, away from this phone, and keep your backup file outside the phone too." />
           </>
         ) : (
           <>

@@ -47,11 +47,14 @@ Keep it visually consistent with the other Settings rows.
 ## 4. First-launch screen
 Extend the existing onboarding flow (reuse the existing stored-flag mechanism in `onboarding.ts`; do not create a second flag system). On first launch only, show a single screen with:
 1. "Your readings stay on this phone. We can't see them or recover them."
-2. "Make a backup now and then. It is free on every plan."
+2. "Make a backup now and then, and save the backup file and your Recovery Key somewhere outside this phone. Backup is free on every plan."
 3. The text `DISCLAIMER_SHORT_FIRST_LAUNCH`
 4. Links to the Terms of Service and Privacy Policy (use the `LegalLinks` component)
 5. A **Continue** button. Tapping Continue is the acceptance. Do **not** use a pre-ticked checkbox.
 If an onboarding screen already exists, add this content to it instead of adding another screen, and tell me what you changed.
+
+## 4b. Recovery Key screen wording
+Find where the Recovery Key is shown to the user (the first-run key choice flow and the backup screen) and make sure the text says: "This key is the only way to open your backup on a new phone. We can't reset it. Save it somewhere safe, away from this phone, and keep your backup file outside the phone too." Change wording only; keep the "I've saved my key" confirmation behaviour as it is.
 
 ## 5. Report footer
 In the report preview (`ReportScreen.tsx`) and in the generated PDF (`pdf.ts`), add the line `DISCLAIMER_REPORT_FOOTER` as a footer at the bottom. In the PDF it should be on every page if the structure allows, otherwise at the end of the document. Do not change any other report content.
