@@ -3,9 +3,17 @@ import { View, Text, ScrollView, TouchableOpacity, Alert, Linking, Platform, Sty
 import Constants from 'expo-constants';
 import { useEntitlement } from '../services/entitlement';
 import { getOfferings, purchasePackage, restorePurchases, PurchasesOffering, PurchasesPackageInfo } from '../services/purchases';
+import { findPackage } from '../services/purchaseProductMatch';
 import { LIMITS, Tier, TIER_DISPLAY_NAME } from '../services/limits';
+import { APP_NAME } from '../config/legal';
+import { LegalLinks } from '../components/LegalLinks';
 import { Screen, Card, Button } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
+
+// Apple requires this on the purchase screen itself, not just linked from Settings
+// (docs/CLAUDE-CODE-PROMPT-legal-links.md §6) — exact wording, not paraphrased.
+const RENEWAL_TEXT =
+  'Renews automatically until you cancel. Cancel any time in your App Store or Google Play subscription settings, at least 24 hours before renewal. Payment is charged to your account when you confirm. If a subscription ends, your data is never deleted; some features lock until you resubscribe.';
 
 // Locked pricing (docs/PAYWALL-SPEC.md §2/§8) — shown whenever a live store
 // offering isn't available (e.g. under Expo Go, or before RevenueCat/store
@@ -22,10 +30,6 @@ const PRODUCT_ID_MAP: Record<'pro' | 'premium', { monthly: string; annual: strin
   pro: { monthly: 'pro_monthly', annual: 'pro_annual' },
   premium: { monthly: 'premium_monthly', annual: 'premium_annual' },
 };
-
-function findPackage(offering: PurchasesOffering | null, productId: string): PurchasesPackageInfo | undefined {
-  return offering?.availablePackages.find(p => p.product.identifier === productId);
-}
 
 // Standard subscription-card layout (App Store / Play Store convention): the
 // monthly price is the big, immediate number since that's what most people
@@ -211,7 +215,7 @@ export default function PaywallScreen({ navigation }: any) {
 
   return (
     <Screen scroll>
-      <Text style={typography.h1}>Health Diary Plans</Text>
+      <Text style={typography.h1}>{APP_NAME} Plans</Text>
       <Text style={[typography.caption, { marginTop: spacing.xs }]}>
         Your subscription funds ongoing improvements and keeps the app ad-free. Your health data always stays on your device.
       </Text>
@@ -253,6 +257,8 @@ export default function PaywallScreen({ navigation }: any) {
 
       <ComparisonTable />
 
+      <Text style={[typography.caption, { marginTop: spacing.lg }]}>{RENEWAL_TEXT}</Text>
+
       <TouchableOpacity onPress={handleRestore} disabled={restoring} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
         <Text style={{ color: colors.primary, fontWeight: '600' }}>{restoring ? 'Restoring…' : 'Restore Purchases'}</Text>
       </TouchableOpacity>
@@ -262,6 +268,10 @@ export default function PaywallScreen({ navigation }: any) {
           <Text style={{ color: colors.textMuted }}>Manage Subscription</Text>
         </TouchableOpacity>
       )}
+
+      <View style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+        <LegalLinks links={['terms', 'privacy']} variant="row" />
+      </View>
     </Screen>
   );
 }

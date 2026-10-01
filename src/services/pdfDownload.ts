@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
 import { shareFile } from './share';
+import { APP_NAME } from '../config/legal';
 
 // PAYWALL-SPEC §6: "no in-app Share button" for the PDF report — the app saves
 // the file the user owns, rather than opening the OS share sheet, reinforcing
@@ -37,7 +38,7 @@ export type DownloadResult = { success: boolean; destinationUri?: string; messag
 // specifically, not an oversight.
 export async function downloadPdfToDevice(sourceUri: string, filename: string): Promise<DownloadResult> {
   if (Platform.OS !== 'android') {
-    const shared = await shareFile(sourceUri, 'Save Health Diary Report', 'application/pdf');
+    const shared = await shareFile(sourceUri, `Save ${APP_NAME} Report`, 'application/pdf');
     return { success: shared, message: shared ? undefined : 'Save was cancelled.' };
   }
 

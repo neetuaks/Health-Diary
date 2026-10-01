@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Alert, TextInput, StyleSheet } from 'react-native';
+import { View, Text, Alert, TextInput, TouchableOpacity, Linking, StyleSheet } from 'react-native';
+import Constants from 'expo-constants';
 import { exportAllAsJSON, exportAllAsCSV } from '../services/dataExport';
 import { emailDiagnostics } from '../services/diagnosticsLog';
 import { useEntitlement } from '../services/entitlement';
 import { TIER_DISPLAY_NAME, Tier } from '../services/limits';
+import { APP_NAME, SUPPORT_EMAIL, openLegalUrl } from '../config/legal';
 import ConfirmDeleteAllModal from '../components/ConfirmDeleteAllModal';
 import { getBackupReminderDays, setBackupReminderDays } from '../services/appSettings';
 import { Screen, Card, Button, Banner, ListButton } from '../theme/components';
@@ -19,6 +21,13 @@ export default function SettingsScreen({ navigation }: any) {
   const { tier, limits, debugTierOverride, setDebugTier } = useEntitlement();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [reminderDays, setReminderDaysState] = useState<number>(30);
+  const appVersion = Constants.expoConfig?.version;
+
+  const openSupportEmail = () => {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() =>
+      Alert.alert("Couldn't open the page", 'Please check your internet connection and try again.')
+    );
+  };
 
   useEffect(() => {
     getBackupReminderDays().then(d => setReminderDaysState(d));
@@ -39,7 +48,7 @@ export default function SettingsScreen({ navigation }: any) {
     <Screen scroll topInset={false}>
       <Text style={typography.h1}>Settings</Text>
 
-      <Banner variant="info" title="Your data never leaves your device" message="Health Diary has no backend, no accounts, and no analytics. Readings stay in local storage unless you explicitly export or share them." />
+      <Banner variant="info" title="Your data never leaves your device" message={`${APP_NAME} has no backend, no accounts, and no analytics. Readings stay in local storage unless you explicitly export or share them.`} />
 
       <SectionLabel>Plan</SectionLabel>
       <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
@@ -126,6 +135,23 @@ export default function SettingsScreen({ navigation }: any) {
           subtitle="Technical log only, not your data — opens your email app to send it"
           onPress={() => emailDiagnostics()}
         />
+      </Card>
+
+      <SectionLabel>About</SectionLabel>
+      <Card style={{ padding: 0, paddingHorizontal: spacing.lg }}>
+        <ListButton label="Privacy Policy" onPress={() => openLegalUrl('privacy')} style={divider} />
+        <ListButton label="Terms of Service" onPress={() => openLegalUrl('terms')} style={divider} />
+        <ListButton label="Medical Disclaimer" onPress={() => openLegalUrl('disclaimer')} style={divider} />
+        <ListButton label="Support" subtitle={SUPPORT_EMAIL} onPress={openSupportEmail} />
+        <View style={[{ paddingBottom: spacing.sm }, divider]}>
+          <TouchableOpacity onPress={() => openLegalUrl('support')} accessibilityRole="link" accessibilityLabel="Visit support page">
+            <Text style={[typography.caption, { color: colors.primary, fontWeight: '600' }]}>Visit support page</Text>
+          </TouchableOpacity>
+        </View>
+        {appVersion ? (
+          <Text style={[typography.caption, { paddingTop: spacing.sm }]}>{APP_NAME} version {appVersion}</Text>
+        ) : null}
+        <Text style={[typography.caption, { paddingTop: spacing.xs, paddingBottom: spacing.sm }]}>Your data stays on your device.</Text>
       </Card>
 
       <SectionLabel>Danger Zone</SectionLabel>
