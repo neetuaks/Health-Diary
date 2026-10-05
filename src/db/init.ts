@@ -73,8 +73,18 @@ export async function initDB() {
 
     addColumnIfMissing('profiles', 'locked_at TEXT');
     addColumnIfMissing('parameter_types', 'locked_at TEXT');
+    addColumnIfMissing('parameter_types', 'created_at TEXT');
 
     seedParameterTypes(db);
+
+    // Custom types created before created_at existed have no value for it yet —
+    // backfill using rowid order (their existing relative add-order) so they don't
+    // all collapse to "same timestamp" and sort arbitrarily. BP/Glucose always get
+    // an explicit created_at from seedParameterTypes above, so this only ever
+    // touches pre-existing custom types.
+    db.execSync(
+      `UPDATE parameter_types SET created_at = printf('1970-01-01T00:00:%05d.000Z', rowid) WHERE created_at IS NULL;`
+    );
     // Dynamic import, not a static one: profileParameterTypes.ts imports getDB from this
     // file, so a static import here would be a require cycle. A cycle is order-dependent —
     // whichever module Metro loads first can end up calling this function while the other

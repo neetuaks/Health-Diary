@@ -5,16 +5,22 @@ import { ParameterType } from '../types';
 // Built-in types (is_builtin = 1) are always available to every profile and never get a
 // row here. A row in this table means "this custom parameter type is enabled for this
 // profile" — see docs comment on the CREATE TABLE in src/db/init.ts.
+// BP first, Glucose second, then custom types in the order they were added — same
+// rule and ordering clause as parameterRegistry.ts's fetchParameterTypes, so the
+// parameter-type band looks identical everywhere it's shown (Diary/Chart/Report).
+const ORDER_BY_DISPLAY_ORDER = `ORDER BY CASE id WHEN 'bp' THEN 0 WHEN 'glucose' THEN 1 ELSE 2 END, created_at ASC, id ASC`;
+
 export async function fetchParameterTypesForProfile(profileId: string | null): Promise<ParameterType[]> {
   const db = getDB();
   const rows = profileId
     ? await db.getAllAsync<any>(
         `SELECT pt.* FROM parameter_types pt
          WHERE pt.is_builtin = 1
-            OR pt.id IN (SELECT parameter_type_id FROM profile_parameter_types WHERE profile_id = ?);`,
+            OR pt.id IN (SELECT parameter_type_id FROM profile_parameter_types WHERE profile_id = ?)
+         ${ORDER_BY_DISPLAY_ORDER};`,
         [profileId]
       )
-    : await db.getAllAsync<any>('SELECT * FROM parameter_types WHERE is_builtin = 1;');
+    : await db.getAllAsync<any>(`SELECT * FROM parameter_types WHERE is_builtin = 1 ${ORDER_BY_DISPLAY_ORDER};`);
   return rows.map((r: any) => ({ ...r, field_definitions: JSON.parse(r.field_definitions) })) as ParameterType[];
 }
 

@@ -55,6 +55,9 @@ export type ParameterType = {
   // Same tier-downgrade locking as Profile.locked_at — only ever set on a
   // custom type (is_builtin = 0); built-ins are never gated or locked.
   locked_at?: string | null;
+  // Drives display order (BP, then Glucose, then custom types in the order
+  // they were added) — see ORDER BY in parameterRegistry.ts / profileParameterTypes.ts.
+  created_at?: string | null;
 };
 
 export type Reading = {
