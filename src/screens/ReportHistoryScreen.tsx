@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, FlatList, Alert, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Alert, TouchableOpacity, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchPdfHistory, deletePdfHistoryEntry, clearPdfHistory, PdfReportRecord } from '../services/pdfHistory';
 import { downloadPdfToDevice } from '../services/pdfDownload';
+import { shareFile } from '../services/share';
 import { useProfile } from '../services/profileContext';
 import { Screen, Card, Button, EmptyState } from '../theme/components';
 import { colors, spacing, typography } from '../theme/tokens';
@@ -18,6 +19,15 @@ export default function ReportHistoryScreen() {
 
   const profileNames = (ids: string[]) =>
     ids.map(id => profiles.find(p => p.id === id)?.name ?? 'Unknown profile').join(', ');
+
+  const handleOpen = async (entry: PdfReportRecord) => {
+    setBusyId(entry.id);
+    try {
+      await shareFile(entry.file_path, 'Readiva Report', 'application/pdf');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const handleRedownload = async (entry: PdfReportRecord) => {
     setBusyId(entry.id);
@@ -57,18 +67,20 @@ export default function ReportHistoryScreen() {
         keyExtractor={h => h.id}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         renderItem={({ item }) => (
-          <Card style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={typography.bodyBold}>{item.type === 'consolidated' ? 'Family Report' : profileNames(item.profile_ids)}</Text>
-              <Text style={typography.caption}>
-                {new Date(item.generated_at).toLocaleString()}{item.date_range ? ` · ${item.date_range}` : ''}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <Button label="Save" size="sm" variant="secondary" disabled={busyId === item.id} onPress={() => handleRedownload(item)} />
-              <Button label="Delete" size="sm" variant="destructive" onPress={() => handleDelete(item)} />
-            </View>
-          </Card>
+          <TouchableOpacity activeOpacity={0.7} disabled={busyId === item.id} onPress={() => handleOpen(item)}>
+            <Card style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={typography.bodyBold}>{item.type === 'consolidated' ? 'Family Report' : profileNames(item.profile_ids)}</Text>
+                <Text style={typography.caption}>
+                  {new Date(item.generated_at).toLocaleString()}{item.date_range ? ` · ${item.date_range}` : ''}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <Button label="Save" size="sm" variant="secondary" disabled={busyId === item.id} onPress={() => handleRedownload(item)} />
+                <Button label="Delete" size="sm" variant="destructive" onPress={() => handleDelete(item)} />
+              </View>
+            </Card>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={() => <EmptyState title="No reports yet" subtitle="Generated PDF reports will show up here." />}
       />
