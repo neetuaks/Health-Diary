@@ -36,7 +36,7 @@ flowchart LR
 | Local storage | `expo-sqlite` modern synchronous/asynchronous API |
 | Secure values | `expo-secure-store` |
 | Encryption | PBKDF2-SHA256 plus TweetNaCl `secretbox` |
-| OCR | iOS Vision and Android ML Kit when native modules exist; filename heuristic fallback otherwise |
+| OCR | iOS Vision / Android ML Kit for text, plus a pure-JS seven-segment pixel decoder (`jpeg-js`); filename heuristic fallback otherwise |
 | Charts | `victory-native` |
 | PDF | `expo-print` plus `expo-sharing` |
 | Tests | Jest, `ts-jest`, Babel/Expo transforms |
@@ -67,6 +67,21 @@ flowchart LR
 | `src/services/pdf.ts` | HTML/SVG report generation (single-profile and consolidated multi-profile) and PDF creation |
 | `src/services/familyDashboard.ts` | Per-profile latest-reading aggregation for the Family tab (Premium) — reuses Diary/Chart's own clinical classification, adds no thresholds of its own |
 | `src/services/diagnosticsLog.ts` | Local diagnostic log and sharing |
+| `src/services/limits.ts` | **Single source of truth** for tier limits (`free`/`pro`/`premium`); no call site hard-codes a number |
+| `src/services/entitlement.tsx` | `EntitlementProvider` + `useEntitlement()`; resolves tier, fails closed to `free` |
+| `src/services/purchases.ts` | Only module that touches `react-native-purchases` (RevenueCat); lazy `require`, every export catches and returns a safe fallback |
+| `src/services/tierMapping.ts` | RevenueCat `customerInfo` → `Tier` (`premium` beats `pro`, else `free`) |
+| `src/services/entitlementLocks.ts` | Downgrade locking: sets `locked_at` on excess profiles/custom types; never deletes |
+| `src/services/debugTierOverride.ts` | `__DEV__`-only SecureStore override to force a tier without real store products |
+| `src/services/paywallPrompt.ts` | Shared "upgrade" prompt used by gated actions |
+| `src/services/purchaseProductMatch.ts` | Matches store products to tiers/periods for the paywall |
+| `src/services/pdfHistory.ts`, `pdfDownload.ts`, `share.ts` | Generated-report history, save-to-device, share-sheet wrapper |
+| `src/services/appSettings.ts`, `deviceAuth.ts` | Local settings; device-auth gate |
+| `src/services/sevenSegmentDecoder.ts` | Pure-JS seven-segment LCD pixel decoder (deskew → Sauvola → connected components → digit grouping → segment classification) |
+| `src/services/ocrSwiftBridge.ts` | JS side of the iOS Vision bridge |
+| `src/config/legal.ts` | All legal/support URLs, support email, disclaimers; `openLegalUrl()` is the only way to open them |
+| `src/screens/PaywallScreen.tsx`, `FamilyDashboardScreen.tsx`, `ConsolidatedReportScreen.tsx`, `ParameterTypesScreen.tsx`, `ProfileParameterTypesScreen.tsx`, `BulkDeleteScreen.tsx`, `ReportHistoryScreen.tsx` | Paywall, Family (Premium), multi-profile report, custom parameter management/assignment, bulk delete, PDF history |
+| `.github/workflows/` | `ci.yml` (npm ci + `npm test` on PRs/pushes to main), `eas-build.yml`, `bootstrap-backlog.yml` |
 | `src/screens/` | User-facing workflows |
 | `src/components/` | Reusable modals and reading UI |
 | `native/android/` | ML Kit OCR source templates |
@@ -159,6 +174,8 @@ erDiagram
         string color
         integer is_builtin
         string field_definitions_json
+        string created_at
+        string locked_at
     }
     READINGS {
         string id PK
@@ -262,9 +279,27 @@ Native OCR and JavaScript fallback do not currently have identical parsing behav
 6. For iOS, verify the Swift and Objective-C bridge files are included in the Xcode target.
 7. Verify native OCR returns numeric values compatible with the parameter field definitions; Android currently writes some parsed values as strings.
 
-### Native OCR configuration caveat
+### Native OCR configuration
 
-`plugins/vision-ocr-plugin/index.ts` exists and copies native source files, but `app.json` currently lists only `expo-splash-screen` in `plugins`. Native OCR should therefore be treated as unavailable until the plugin is explicitly configured and a native prebuild/rebuild confirms the modules are registered.
+`app.json` lists `./plugins/vision-ocr-plugin`. The plugin **must remain plain JS (`index.js`)** because `eas-cli` cannot load a `.ts` plugin. It copies the Kotlin sources, adds the ML Kit Gradle dependency and registers `MLKitOCRPackage` in `MainApplication.kt`. Do not add the `com.google.mlkit.vision.DEPENDENCIES` manifest meta-data (`expo-dev-launcher` already declares it; the manifest merge fails). A dev-client APK exists; iOS Vision code has never been built (no macOS).
+
+### Seven-segment decoder (current pipeline)
+
+```mermaid
+flowchart TD
+    Img[Photo URI] --> Native[Native OCR: rawText only]
+    Img --> Dec[sevenSegmentDecoder.ts: jpeg-js decode, deskew, Sauvola, components, digit grouping]
+    Native --> Classify[Classify bp vs glucose from labels/units]
+    Dec --> Fuse[ocr.ts fusion + validBP / validPulse]
+    Classify --> Fuse
+    Fuse -->|row count and values fit| Out[Decoder values]
+    Fuse -->|do not fit| Fallback[ocrParsing.ts rawText-only parse]
+```
+
+- Native ML Kit/Vision reads printed labels well but misreads LCD digits; the decoder supplies digits, native supplies classification.
+- Accuracy: 4/4 on `docs/ocr-samples/` (Omron HEM-7111, Accu-Chek Active) but only 3/12 on crowdsourced other brands (`docs/PHOTO-GUIDE.md`). Wrong auto-fill on other devices is expected; the "double-check" banner is load-bearing.
+- Debugging: reproduce with a sample in `__tests__/sevenSegmentDecoder.test.ts` / `ocr_fusion.test.ts` first (pure JS, no device needed). If the decoder returns nothing, check the fallback path before touching the decoder. Decoder changes need only a JS reload on the existing dev client.
+- **Tier gating gap:** `limits.ts` defines `canUseOCR` (Free=false) but nothing reads it; `DiaryScreen` passes `onScanPhoto` unconditionally on this branch. See §18.
 
 ## 9. Backup, Restore, and Encryption
 
@@ -508,3 +543,86 @@ Before merging a change:
 - [ ] Run `npx expo export --platform android`.
 - [ ] For native changes, run prebuild and a native device/emulator build.
 - [ ] Verify the original user flow manually when the change affects UI or native behavior.
+- [ ] Also run `npm run test:components` (CI does not).
+
+## 17. Entitlements, Paywall, Family and Custom Parameters
+
+### Tier resolution
+
+```mermaid
+flowchart LR
+    Override[debugTierOverride: __DEV__ only] --> Hook
+    RC[RevenueCat via purchases.ts] --> Map[tierMapping.ts] --> Hook[useEntitlement]
+    Hook --> Limits[limits.ts TIER_LIMITS]
+    Limits --> Gates[Diary window / export window / PDF / profiles / custom params / family]
+    Hook --> Locks[entitlementLocks.ts: lock, never delete]
+```
+
+- Rules (LOCKED, see `docs/PAYWALL-SPEC.md`): Free = 1 profile, 0 custom params, 7-day view/export window, no PDF file; Pro = 2 profiles, 4 custom params, full history, PDF; Premium = 10 profiles, 8 custom params, plus consolidated report and Family dashboard. Backup/Restore is free on every tier and always stores the full dataset.
+- **Fails closed to `free`** when RevenueCat is absent/offline, but must never block app open or logging.
+- A downgrade/lapse **never deletes data**: excess profiles/custom types get `locked_at` and are restored on re-subscribe; windows only filter what is displayed/exported.
+- `react-native-purchases` is a native module: not runnable in Expo Go. `app.json` `revenueCatApiKey.ios/android` are currently empty strings, so `configurePurchases()` is a no-op and every device is `free` unless the dev override is used.
+
+### Parameter-type ordering and scoping
+
+- Built-ins (`bp`, `glucose`) are available to all profiles; custom types are enabled per profile through `profile_parameter_types`.
+- Display order everywhere is `ORDER BY CASE id WHEN 'bp' THEN 0 WHEN 'glucose' THEN 1 ELSE 2 END, created_at, id`. `parameter_types.created_at` is added by an `addColumnIfMissing` migration plus a `rowid`-based backfill (`1970-01-01T00:00:<rowid>`); built-ins use fixed 2000-01-01 sentinels. Diary/Chart/Report share the `ScrollableTabs` component for this band. (Currently uncommitted, see §18.)
+- Rule from CLAUDE.md still applies: never special-case BP/Glucose fields in Diary/Chart/Report/New Record; use `field_definitions`.
+
+### Debugging by symptom
+
+| Symptom | First check |
+|---|---|
+| User sees only 7 days of data / cannot generate PDF | `useEntitlement().tier`; `__DEV__` override in SecureStore; RevenueCat key empty in `app.json` |
+| Paid user shows as Free | `purchases.ts` returned `null` (SDK not linked / Expo Go / offline with no cache); entitlement ids must be exactly `pro` / `premium` |
+| Custom parameter missing for a profile | `profile_parameter_types` row; `locked_at` on profile or type; tier's `maxCustomParams` |
+| Parameter tabs in wrong order | `created_at` NULL on a row (backfill runs in `initDB`); ORDER BY present in both `parameterRegistry.ts` and `profileParameterTypes.ts` |
+| Family tab empty/locked | `limits.familyDashboard`; `familyDashboard.ts` reuses Diary classification (no thresholds of its own) |
+| Legal link does nothing | `src/config/legal.ts` URLs point to `readiva.wisdomveda.com`, **not published yet**; `openLegalUrl` shows a "Couldn't open" alert |
+| Report History row tap | Opens the stored PDF via `share.ts`; "Save" uses `pdfDownload.ts`; a missing file means `file_path` is stale |
+
+## 18. Project Status and Pending Work
+
+*Snapshot: 2026-10-05, branch `test/ocr-on-main`.*
+
+### Verified state
+- `npx tsc --noEmit`: clean. `npm test`: 31 suites / 144 tests pass. Component suites (`npm run test:components`) and `expo export` were not re-run for this snapshot.
+- Implemented: manual BP/Glucose logging, registry-driven custom parameters, profiles, Diary/Chart/Report, encrypted backup/restore with local safety copy, first-run onboarding, legal links/disclaimers, paywall UI + entitlement logic, Family dashboard and consolidated report, PDF history, bulk delete, seven-segment OCR decoder.
+
+### Branch / git state
+| Item | State |
+|---|---|
+| `origin/main` | `f33cf04` (includes legal-links PR #21). Local `main` is stale at `01ba22b`: needs `git pull` |
+| `test/ocr-on-main` | 6 commits ahead of `origin/main`, **never pushed** (no upstream); merges the decoder branch into main |
+| `feature/ocr-seven-segment-decoder` | Its 1 commit (`2b9818b`) is not on main; already merged into `test/ocr-on-main` |
+| `ci/tests-pass`, `feature/custom-param-assignment`, `feature/family-features`, `feature/paywall-subscription`, `feature/rebrand-readiva` | Fully merged into main (0 ahead); candidates for deletion |
+| Uncommitted work | 10 source files (below) plus machine-local `.expo/` noise |
+
+### Uncommitted changes awaiting review/commit
+1. **Parameter-type ordering**: `src/db/init.ts` (new `created_at` column + backfill), `src/db/seed.ts`, `src/services/parameterRegistry.ts`, `src/services/profileParameterTypes.ts`, `src/types/index.ts`.
+2. **`ScrollableTabs`** in `src/theme/components.tsx`, used by `DiaryScreen`, `ChartScreen`, `ReportScreen`.
+3. **Report History**: whole row is tappable to open the PDF (`ReportHistoryScreen.tsx`). The `Save`/`Delete` buttons sit inside the tappable row; verify tapping them does not also trigger open.
+4. Do **not** commit `.expo/dev/logs/start.log` or `.expo/devices.json`.
+5. Untracked `docs/CLAUDE-CODE-PROMPT-legal-links (1).md` is a differing duplicate of the tracked prompt file; review and delete.
+
+### Pending implementation
+- **RevenueCat/store setup** (PAYWALL-SPEC §8): create Play/App Store products, RevenueCat entitlements `pro`/`premium` and an Offering, fill `revenueCatApiKey` in `app.json`, build a dev client with `react-native-purchases` linked, then test purchase/restore/expiry on a device. Update Play Data Safety / App Privacy for RevenueCat.
+- **OCR tier gating**: wire `limits.canUseOCR` into the `onScanPhoto` prop in `DiaryScreen` (currently ungated; spec says Pro+).
+- **OCR accuracy**: decoder generalizes poorly (3/12 on other brands). Decide: ship behind the verify banner, restrict to known devices, or invest in a learned classifier. Not on `main` by design.
+- **Legal site**: publish `readiva.wisdomveda.com/{privacy,terms,disclaimer,support}`, or links show the error alert.
+- **iOS**: Vision OCR and the whole iOS build are untested (no macOS).
+- Bluetooth `source` is modeled but has no UI.
+
+### Pending review / testing
+- Manual end-to-end: downgrade locking and re-subscribe unlock, restore with locked profiles, Family dashboard, consolidated report, PDF history open/save/delete.
+- Component-test gaps: `DiaryScreen`, `ChartScreen`, `ReportScreen`, `ReportHistoryScreen`, `PhotoEntryModal`, `ReadingItem`, `ReadingsChart`, `RestoreOptionsModal`, `ErrorBoundary`.
+- No automated SQLite migration test (the new `created_at` backfill is untested against a pre-existing DB).
+- E2E is a placeholder.
+- **CI gap**: `ci.yml` runs only `npm test` on Node 18; it does not run `tsc`, `test:components`, or `expo export`. Align Node with what Expo SDK 57 requires.
+
+### Recommended order to close out
+1. Commit the three uncommitted groups separately (ordering, tabs, report-history); run `npm run test:components` and `npx expo export --platform android` first.
+2. `git pull` local `main`; push `test/ocr-on-main` (or open a PR) only after the OCR-on-main decision.
+3. Add OCR tier gating and a migration test.
+4. Delete merged feature branches.
+5. Do RevenueCat/store setup, then `npm ci --include=dev` and an EAS dev build for purchase testing.
