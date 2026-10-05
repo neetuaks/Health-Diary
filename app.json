@@ -20,8 +20,7 @@
     },
     "plugins": [
       "expo-splash-screen",
-      "expo-mail-composer",
-      "./plugins/vision-ocr-plugin"
+      "expo-mail-composer"
     ],
     "extra": {
       "eas": {
