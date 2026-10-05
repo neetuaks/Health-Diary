@@ -7,6 +7,10 @@ export type Profile = {
   glucose_unit_pref?: 'mg/dL' | 'mmol/L';
   weight_unit_pref?: 'kg' | 'lb';
   last_backup_at?: string | null;
+  // Set when a tier downgrade left this profile over the new plan's profile
+  // limit — see docs/PAYWALL-SPEC.md §7 and src/services/entitlementLocks.ts.
+  // Locked, never deleted: readings survive and reappear the moment it unlocks.
+  locked_at?: string | null;
 };
 
 export type FieldDefinition = {
@@ -48,6 +52,12 @@ export type ParameterType = {
   color?: string | null;
   is_builtin?: number;
   field_definitions: FieldDefinition[];
+  // Same tier-downgrade locking as Profile.locked_at — only ever set on a
+  // custom type (is_builtin = 0); built-ins are never gated or locked.
+  locked_at?: string | null;
+  // Drives display order (BP, then Glucose, then custom types in the order
+  // they were added) — see ORDER BY in parameterRegistry.ts / profileParameterTypes.ts.
+  created_at?: string | null;
 };
 
 export type Reading = {

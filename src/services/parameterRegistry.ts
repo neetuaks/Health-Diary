@@ -2,9 +2,14 @@ import { getDB } from '../db/init';
 import { ParameterType } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
+// BP first, Glucose second, then custom types in the order they were added —
+// consistent everywhere parameter types are listed (see profileParameterTypes.ts's
+// fetchParameterTypesForProfile for the per-profile equivalent).
+const ORDER_BY_DISPLAY_ORDER = `ORDER BY CASE id WHEN 'bp' THEN 0 WHEN 'glucose' THEN 1 ELSE 2 END, created_at ASC, id ASC`;
+
 export async function fetchParameterTypes(): Promise<ParameterType[]> {
   const db = getDB();
-  const rows = await db.getAllAsync<any>('SELECT * FROM parameter_types;');
+  const rows = await db.getAllAsync<any>(`SELECT * FROM parameter_types ${ORDER_BY_DISPLAY_ORDER};`);
   return rows.map((r: any) => ({ ...r, field_definitions: JSON.parse(r.field_definitions) })) as ParameterType[];
 }
 
@@ -20,11 +25,12 @@ export async function insertParameterType(
   const icon: string | null = pt.icon ?? null;
   const color: string | null = pt.color ?? null;
   const fieldDefinitionsJson = JSON.stringify(pt.field_definitions);
+  const createdAt = new Date().toISOString();
   await db.runAsync(
-    'INSERT INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions) VALUES (?,?,?,?,?,?);',
-    [id, pt.display_name, icon, color, 0, fieldDefinitionsJson]
+    'INSERT INTO parameter_types (id, display_name, icon, color, is_builtin, field_definitions, created_at) VALUES (?,?,?,?,?,?,?);',
+    [id, pt.display_name, icon, color, 0, fieldDefinitionsJson, createdAt]
   );
-  return { id, display_name: pt.display_name, icon, color, is_builtin: 0, field_definitions: pt.field_definitions };
+  return { id, display_name: pt.display_name, icon, color, is_builtin: 0, field_definitions: pt.field_definitions, created_at: createdAt };
 }
 
 // Guarded with `AND is_builtin = 0` so a bug in the calling UI can never edit BP/Glucose —
@@ -37,10 +43,13 @@ export async function updateParameterType(pt: ParameterType): Promise<void> {
   );
 }
 
-// Same is_builtin guard as updateParameterType.
+// Same is_builtin guard as updateParameterType. Also drops any per-profile scoping rows
+// for this type (see src/services/profileParameterTypes.ts) so they don't linger as
+// orphans once the type itself is gone.
 export async function deleteParameterType(id: string): Promise<void> {
   const db = getDB();
   await db.runAsync('DELETE FROM parameter_types WHERE id = ? AND is_builtin = 0;', [id]);
+  await db.runAsync('DELETE FROM profile_parameter_types WHERE parameter_type_id = ?;', [id]);
 }
 
 // parameter_types has no profile_id column — it's shared across every profile — so this

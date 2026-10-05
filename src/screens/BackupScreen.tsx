@@ -9,6 +9,7 @@ import { shareFile } from '../services/share';
 import RestoreOptionsModal from '../components/RestoreOptionsModal';
 import { getDB } from '../db/init';
 import { useProfile } from '../services/profileContext';
+import { APP_NAME } from '../config/legal';
 import { Screen, Button, Card, Banner } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
 
@@ -76,7 +77,7 @@ export default function BackupScreen() {
     if (!recovery) return Alert.alert('No key', 'Generate a Recovery Key first');
     try {
       const path = await generateRecoveryKeyPDF(recovery);
-      await shareFile(path, 'Health Diary Recovery Key', 'application/pdf');
+      await shareFile(path, `${APP_NAME} Recovery Key`, 'application/pdf');
     } catch (e: any) {
       Alert.alert('Could not share key', e?.message ?? 'Please try again.');
     }
@@ -110,7 +111,7 @@ export default function BackupScreen() {
     if (!backupUri) return;
     setSharingBackup(true);
     try {
-      await shareFile(backupUri, 'Health Diary Backup', 'application/json');
+      await shareFile(backupUri, `${APP_NAME} Backup`, 'application/json');
     } finally {
       setSharingBackup(false);
     }
@@ -225,7 +226,7 @@ export default function BackupScreen() {
               <Button label="Share Key" variant="secondary" onPress={handleShareKey} />
               <Button label="I've saved my key" onPress={handleConfirmSaved} />
             </View>
-            <Banner variant="warning" message="Save this key now — it can't be recovered later. You need it to restore your data on another device." />
+            <Banner variant="warning" message="This key is the only way to open your backup on a new phone. We can't reset it. Save it somewhere safe, away from this phone, and keep your backup file outside the phone too." />
           </>
         ) : (
           <>

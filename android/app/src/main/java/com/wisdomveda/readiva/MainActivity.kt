@@ -1,4 +1,4 @@
-package com.expo.HealthDiary
+package com.wisdomveda.readiva
 
 import android.os.Build
 import android.os.Bundle

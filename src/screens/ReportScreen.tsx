@@ -1,15 +1,36 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import Svg, { Path, Polyline, Line } from 'react-native-svg';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useProfile } from '../services/profileContext';
 import { fetchReadingsForProfile } from '../services/readingService';
-import { fetchParameterTypes } from '../services/parameterRegistry';
+import { fetchParameterTypesForProfile } from '../services/profileParameterTypes';
+import { useEntitlement } from '../services/entitlement';
+import { showUpgradePrompt } from '../services/paywallPrompt';
 import { generateReportPDF } from '../services/pdf';
-import { shareFile } from '../services/share';
+import { persistAndRecordPdf } from '../services/pdfHistory';
+import { downloadPdfToDevice } from '../services/pdfDownload';
 import ReadingsChart from '../components/ReadingsChart';
-import { filterByRange, RangeKey, ageFromDOB, ageInMonthsFromDOB, fieldClassification, clinicalColorKey } from '../services/utils';
-import { Screen, Card, SegmentedControl, EmptyState, ShareIcon } from '../theme/components';
+import { filterByRange, filterByHistoryWindow, RangeKey, ageFromDOB, ageInMonthsFromDOB, fieldClassification, clinicalColorKey, formatFieldValue } from '../services/utils';
+import { DISCLAIMER_REPORT_FOOTER } from '../config/legal';
+import { Screen, Card, SegmentedControl, ScrollableTabs, EmptyState, Banner } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
+
+// The standard "share/export" glyph (box open at the top with an arrow exiting
+// upward — the same shape Amazon, iOS, and most Android apps use). PAYWALL-SPEC
+// §6 still means this button downloads straight to the device rather than
+// opening the OS share sheet, but a plain "⬇" text glyph read as a duplicate of
+// the scroll-hint arrows below, so it's drawn as a real vector icon instead of
+// reusing an ambiguous Unicode arrow.
+function DownloadIcon({ size = 18, color = colors.primaryDark }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <Polyline points="16 6 12 2 8 6" />
+      <Line x1="12" y1="2" x2="12" y2="15" />
+    </Svg>
+  );
+}
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
   { key: 'today', label: 'Today' },
@@ -22,11 +43,13 @@ const COL_WIDTH = 76;
 
 export default function ReportScreen() {
   const { activeProfile } = useProfile();
+  const { limits } = useEntitlement();
+  const navigation = useNavigation<any>();
   const [readings, setReadings] = useState<any[]>([]);
   const [types, setTypes] = useState<any[]>([]);
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>('30');
-  const [sharing, setSharing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   // Drives the scroll-position arrows below — same pattern as Diary: the chart +
   // table can run past one screen, and without a hint there's nothing on screen
   // suggesting there's more below.
@@ -35,17 +58,22 @@ export default function ReportScreen() {
   const [scrollY, setScrollY] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
-  useEffect(() => { fetchParameterTypes().then(setTypes); }, []);
-
   // Refetches on every focus, not just once on mount — see ChartScreen for why a
   // plain useEffect(..., [activeProfile]) goes stale on a bottom-tab navigator.
+  // Parameter types are fetched here too, not in a separate mount-only effect —
+  // they're profile-scoped now, so a profile switch or a parameter change made
+  // elsewhere (Profiles > Parameters) needs to be picked up on focus as well.
   useFocusEffect(
     useCallback(() => {
       // Clear rather than just skip the fetch when there's no active profile
       // (e.g. right after "Delete All Data") — otherwise whatever was last
       // fetched for a now-gone profile just keeps rendering. See ChartScreen.
-      if (!activeProfile) { setReadings([]); return; }
+      if (!activeProfile) { setReadings([]); setTypes([]); setSelectedTypeId(null); return; }
       fetchReadingsForProfile(activeProfile.id).then(setReadings);
+      fetchParameterTypesForProfile(activeProfile.id).then(ts => {
+        setTypes(ts);
+        setSelectedTypeId(prev => (prev && ts.some((t: any) => t.id === prev) ? prev : null));
+      });
     }, [activeProfile])
   );
 
@@ -57,22 +85,35 @@ export default function ReportScreen() {
     }
   }, [types, selectedTypeId]);
 
-  // One-tap generate+share, next to the type toggle like Diary's "+" button.
-  const handleShare = async () => {
+  // PAYWALL-SPEC §7: Free never gets a PDF file written at all — the on-screen
+  // chart/table below (already generated from the same windowed readings) IS
+  // its preview. Pro/Premium generate, persist into Report History, and save
+  // to a location the user owns (see pdfDownload.ts) — no in-app "Share" step.
+  const handleDownload = async () => {
+    if (!limits.canGeneratePdf) {
+      showUpgradePrompt(navigation, 'Downloading a PDF report needs Pro or Premium. Free shows a preview of your last 7 days.');
+      return;
+    }
     if (!activeProfile || !selectedTypeId || sortedScoped.length === 0) return;
-    setSharing(true);
+    setDownloading(true);
     try {
-      const filteredByRange = filterByRange(readings, range);
+      const filteredByRange = filterByRange(windowedReadings, range);
       const uri = await generateReportPDF(activeProfile, filteredByRange, [selectedTypeId], range);
-      await shareFile(uri, 'Health Diary Report', 'application/pdf');
+      const dates = sortedScoped.map(r => new Date(r.recorded_at).getTime());
+      const dateRangeLabel = `${new Date(Math.min(...dates)).toLocaleDateString()} – ${new Date(Math.max(...dates)).toLocaleDateString()}`;
+      const record = await persistAndRecordPdf(uri, { profileIds: [activeProfile.id], dateRange: dateRangeLabel, type: 'single' });
+      const result = await downloadPdfToDevice(record.file_path, `healthdiary_report_${activeProfile.name}.pdf`);
+      if (!result.success) Alert.alert('Could not save', result.message ?? 'Please try again.');
     } catch (e: any) {
       Alert.alert('Report failed', e?.message ?? 'Please try again.');
     } finally {
-      setSharing(false);
+      setDownloading(false);
     }
   };
 
-  const filteredByRange = filterByRange(readings, range);
+  const windowedReadings = filterByHistoryWindow(readings, limits.historyWindowDays);
+  const hasOlderHiddenReadings = limits.historyWindowDays !== null && readings.length > windowedReadings.length;
+  const filteredByRange = filterByRange(windowedReadings, range);
   const scoped = selectedTypeId ? filteredByRange.filter(r => r.parameter_type_id === selectedTypeId) : [];
   const sortedScoped = [...scoped].sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
   const age = activeProfile ? ageFromDOB(activeProfile.date_of_birth) : null;
@@ -86,23 +127,56 @@ export default function ReportScreen() {
 
   return (
     <Screen topInset={false}>
+      {hasOlderHiddenReadings && (
+        <Banner
+          variant="info"
+          message="Showing last 7 days. See your full history with Pro."
+          onPress={() => navigation.navigate('Paywall')}
+        />
+      )}
+
       <View style={styles.toggleRow}>
         <View style={{ flex: 1 }}>
-          <SegmentedControl
+          <ScrollableTabs
             options={types.map((t: any) => ({ key: t.id, label: t.display_name }))}
             value={selectedTypeId ?? ''}
             onChange={setSelectedTypeId}
           />
         </View>
+        {limits.canGeneratePdf && (
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => navigation.navigate('ReportHistory')}
+            accessibilityLabel="Report history"
+          >
+            <Text style={{ fontSize: 16 }}>{'🕘'}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
-          style={[styles.shareButton, (sharing || sortedScoped.length === 0) && styles.shareButtonDisabled]}
-          onPress={handleShare}
-          disabled={sharing || sortedScoped.length === 0}
-          accessibilityLabel="Generate and share PDF report"
+          style={styles.shareButton}
+          onPress={() => {
+            if (limits.consolidatedReport) navigation.navigate('ConsolidatedReport');
+            else showUpgradePrompt(navigation, 'A consolidated report covering several profiles at once needs Premium.');
+          }}
+          accessibilityLabel="Consolidated family report"
         >
-          <ShareIcon size={18} color={colors.primaryDark} />
+          <Text style={{ fontSize: 16 }}>{'👪'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.shareButton, (downloading || sortedScoped.length === 0) && styles.shareButtonDisabled]}
+          onPress={handleDownload}
+          disabled={downloading || sortedScoped.length === 0}
+          accessibilityLabel="Download PDF report"
+        >
+          <DownloadIcon size={18} color={colors.primaryDark} />
         </TouchableOpacity>
       </View>
+
+      {!limits.canGeneratePdf && (
+        <Text style={[typography.caption, { marginBottom: spacing.sm }]}>
+          Preview only — this report has a "Preview" watermark and can't be downloaded on Free.
+        </Text>
+      )}
 
       <View style={{ marginBottom: spacing.md }}>
         <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
@@ -118,7 +192,10 @@ export default function ReportScreen() {
           scrollEventThrottle={32}
         >
           <Card>
-            <Text style={typography.bodyBold}>{activeProfile?.name ?? 'No profile'}{age !== null ? ` · ${age} yrs` : ''}</Text>
+            <Text style={typography.bodyBold}>
+              {activeProfile?.name ?? 'No profile'}{age !== null ? ` · ${age} yrs` : ''}
+              {!limits.canGeneratePdf ? '  •  PREVIEW' : ''}
+            </Text>
             <Text style={typography.caption}>{sortedScoped.length} reading{sortedScoped.length === 1 ? '' : 's'} in the selected range</Text>
           </Card>
 
@@ -148,11 +225,7 @@ export default function ReportScreen() {
                           <Text style={[styles.tableCell, { width: COL_WIDTH }]}>{d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</Text>
                           <Text style={[styles.tableCell, { width: COL_WIDTH }]}>{d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</Text>
                           {fields.map((f: any) => {
-                            const val = it.vals[f.key];
-                            const hasValue = val !== undefined && val !== '';
-                            const display = hasValue
-                              ? (f.dataType !== 'numeric' ? (f.optionShortLabels?.[val] ?? f.optionLabels?.[val] ?? String(val)) : String(val))
-                              : '—';
+                            const display = formatFieldValue(f, it.vals[f.key]);
                             const cls = f.dataType === 'numeric' && selectedTypeId ? fieldClassification(selectedTypeId, f.key, it.vals, ageInMonths) : null;
                             return (
                               <Text
@@ -172,6 +245,8 @@ export default function ReportScreen() {
               </Card>
             </>
           )}
+
+          <Text style={[typography.caption, styles.reportFooter]}>{DISCLAIMER_REPORT_FOOTER}</Text>
         </ScrollView>
         {showScrollUpHint && (
           <TouchableOpacity
@@ -200,6 +275,7 @@ export default function ReportScreen() {
 
 const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  reportFooter: { textAlign: 'center', marginTop: spacing.xl },
   shareButton: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.primaryMuted, alignItems: 'center', justifyContent: 'center' },
   shareButtonDisabled: { opacity: 0.5 },
   tableRow: { flexDirection: 'row', paddingVertical: spacing.sm },

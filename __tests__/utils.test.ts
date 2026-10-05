@@ -1,6 +1,7 @@
 import {
   rangeStart,
   filterByRange,
+  filterByHistoryWindow,
   mgdlToMmolL,
   mmolLToMgdl,
   classifyBP,
@@ -17,6 +18,25 @@ import {
   startOfThisYear,
   matchesDateRange
 } from '../src/services/utils';
+
+describe('filterByHistoryWindow (PAYWALL-SPEC §2-4 — Free\'s 7-day in-app/export cap)', () => {
+  const now = new Date();
+  const recent = (daysAgo: number) => new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+
+  test('excludes readings older than the window, keeps newer ones', () => {
+    const readings = [
+      { id: 'in', recorded_at: recent(1) },
+      { id: 'edge', recorded_at: recent(6) },
+      { id: 'out', recorded_at: recent(10) },
+    ];
+    expect(filterByHistoryWindow(readings, 7).map(r => r.id).sort()).toEqual(['edge', 'in']);
+  });
+
+  test('null window (paid tiers) returns every reading unfiltered', () => {
+    const readings = [{ id: 'a', recorded_at: recent(1) }, { id: 'b', recorded_at: recent(400) }];
+    expect(filterByHistoryWindow(readings, null)).toEqual(readings);
+  });
+});
 
 test('rangeStart produces reasonable dates', () => {
   const r7 = rangeStart('7');

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ViewStyle, TextStyle, StyleProp } from 'react-native';
 import { SafeAreaView, Edge } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { colors, spacing, radius, typography } from './tokens';
@@ -79,7 +79,7 @@ export function Button({
   );
 }
 
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
@@ -108,6 +108,43 @@ export function SegmentedControl<T extends string>({
         </TouchableOpacity>
       ))}
     </View>
+  );
+}
+
+// Same pill-track look as SegmentedControl, but horizontally scrollable with
+// content-sized chips instead of equal flex:1 columns — for lists that grow
+// (parameter types: BP, Glucose, then any number of custom types) where
+// squeezing everything into one row's width would make labels unreadable.
+// Used identically on Diary/Chart/Report so the parameter-type band looks and
+// behaves the same everywhere it appears.
+export function ScrollableTabs<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.tabsTrack}
+      contentContainerStyle={styles.tabsContent}
+    >
+      {options.map(opt => (
+        <TouchableOpacity
+          key={opt.key}
+          onPress={() => onChange(opt.key)}
+          style={[styles.tab, value === opt.key && styles.tabActive]}
+        >
+          <Text style={[styles.tabLabel, value === opt.key && styles.tabLabelActive]} numberOfLines={1}>
+            {opt.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
   );
 }
 
@@ -219,6 +256,12 @@ const styles = StyleSheet.create({
   segmentActive: { backgroundColor: colors.surface, ...shadow },
   segmentLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
   segmentLabelActive: { color: colors.primary },
+  tabsTrack: { backgroundColor: colors.background, borderRadius: radius.md, padding: 4, borderWidth: 1, borderColor: colors.border },
+  tabsContent: { flexDirection: 'row', alignItems: 'center' },
+  tab: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.sm, marginRight: 4 },
+  tabActive: { backgroundColor: colors.surface, ...shadow },
+  tabLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  tabLabelActive: { color: colors.primary },
   listButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md },
   chevron: { fontSize: 22, color: colors.textMuted, marginLeft: spacing.sm },
   banner: { borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
