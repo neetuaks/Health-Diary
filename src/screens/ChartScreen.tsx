@@ -7,7 +7,7 @@ import { fetchParameterTypesForProfile } from '../services/profileParameterTypes
 import { useEntitlement } from '../services/entitlement';
 import ReadingsChart from '../components/ReadingsChart';
 import { filterByRange, filterByHistoryWindow, RangeKey, ageInMonthsFromDOB } from '../services/utils';
-import { Screen, SegmentedControl, EmptyState, Banner } from '../theme/components';
+import { Screen, SegmentedControl, ScrollableTabs, EmptyState, Banner } from '../theme/components';
 import { spacing } from '../theme/tokens';
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
@@ -86,7 +86,7 @@ export default function ChartScreen() {
           )}
 
           <View style={styles.toggleRow}>
-            <SegmentedControl
+            <ScrollableTabs
               options={types.map((t: any) => ({ key: t.id, label: t.display_name }))}
               value={selectedType ?? ''}
               onChange={setSelectedType}

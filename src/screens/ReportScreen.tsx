@@ -13,7 +13,7 @@ import { downloadPdfToDevice } from '../services/pdfDownload';
 import ReadingsChart from '../components/ReadingsChart';
 import { filterByRange, filterByHistoryWindow, RangeKey, ageFromDOB, ageInMonthsFromDOB, fieldClassification, clinicalColorKey, formatFieldValue } from '../services/utils';
 import { DISCLAIMER_REPORT_FOOTER } from '../config/legal';
-import { Screen, Card, SegmentedControl, EmptyState, Banner } from '../theme/components';
+import { Screen, Card, SegmentedControl, ScrollableTabs, EmptyState, Banner } from '../theme/components';
 import { colors, spacing, typography, radius } from '../theme/tokens';
 
 // The standard "share/export" glyph (box open at the top with an arrow exiting
@@ -137,7 +137,7 @@ export default function ReportScreen() {
 
       <View style={styles.toggleRow}>
         <View style={{ flex: 1 }}>
-          <SegmentedControl
+          <ScrollableTabs
             options={types.map((t: any) => ({ key: t.id, label: t.display_name }))}
             value={selectedTypeId ?? ''}
             onChange={setSelectedTypeId}

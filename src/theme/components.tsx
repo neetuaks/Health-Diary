@@ -111,6 +111,43 @@ export function SegmentedControl<T extends string>({
   );
 }
 
+// Same pill-track look as SegmentedControl, but horizontally scrollable with
+// content-sized chips instead of equal flex:1 columns — for lists that grow
+// (parameter types: BP, Glucose, then any number of custom types) where
+// squeezing everything into one row's width would make labels unreadable.
+// Used identically on Diary/Chart/Report so the parameter-type band looks and
+// behaves the same everywhere it appears.
+export function ScrollableTabs<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.tabsTrack}
+      contentContainerStyle={styles.tabsContent}
+    >
+      {options.map(opt => (
+        <TouchableOpacity
+          key={opt.key}
+          onPress={() => onChange(opt.key)}
+          style={[styles.tab, value === opt.key && styles.tabActive]}
+        >
+          <Text style={[styles.tabLabel, value === opt.key && styles.tabLabelActive]} numberOfLines={1}>
+            {opt.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
 // A full-width, tappable row for navigation ("beautiful button" style list item) —
 // used for Settings entries, profile rows, backup rows, etc. instead of bare text links.
 export function ListButton({
@@ -219,6 +256,12 @@ const styles = StyleSheet.create({
   segmentActive: { backgroundColor: colors.surface, ...shadow },
   segmentLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
   segmentLabelActive: { color: colors.primary },
+  tabsTrack: { backgroundColor: colors.background, borderRadius: radius.md, padding: 4, borderWidth: 1, borderColor: colors.border },
+  tabsContent: { flexDirection: 'row', alignItems: 'center' },
+  tab: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.sm, marginRight: 4 },
+  tabActive: { backgroundColor: colors.surface, ...shadow },
+  tabLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  tabLabelActive: { color: colors.primary },
   listButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md },
   chevron: { fontSize: 22, color: colors.textMuted, marginLeft: spacing.sm },
   banner: { borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },

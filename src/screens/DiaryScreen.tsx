@@ -13,7 +13,7 @@ import { fetchParameterTypesForProfile } from '../services/profileParameterTypes
 import { useEntitlement } from '../services/entitlement';
 import { showUpgradePrompt } from '../services/paywallPrompt';
 import { filterByHistoryWindow } from '../services/utils';
-import { Screen, Banner, EmptyState, SegmentedControl } from '../theme/components';
+import { Screen, Banner, EmptyState, ScrollableTabs } from '../theme/components';
 import { colors, spacing, radius } from '../theme/tokens';
 
 const DATE_COL_WIDTH = 60;
@@ -129,7 +129,7 @@ export default function DiaryScreen() {
 
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <SegmentedControl
+              <ScrollableTabs
                 options={paramTypes.map(t => ({ key: t.id, label: t.display_name }))}
                 value={selectedTypeId ?? ''}
                 onChange={setSelectedTypeId}
